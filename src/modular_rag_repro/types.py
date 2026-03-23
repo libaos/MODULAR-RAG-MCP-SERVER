@@ -34,6 +34,16 @@ class RetrievalResult:
 
 
 @dataclass(slots=True)
+class ProcessedQuery:
+    """查询预处理后的结果。"""
+
+    original_text: str
+    normalized_text: str
+    keywords: List[str] = field(default_factory=list)
+    filters: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class TraceStage:
     """Trace 中的单个阶段记录。"""
     name: str

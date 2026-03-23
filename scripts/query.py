@@ -1,11 +1,26 @@
 #!/usr/bin/env python
-"""知识库查询命令行骨架。"""
+"""知识库查询命令行入口。
+
+当前阶段已经接入最小查询链路：
+
+- QueryProcessor
+- DenseRetriever
+- 结果打印
+
+还没有接入：
+
+- SparseRetriever
+- RRF Fusion
+- rerank
+- 响应格式化器
+"""
 
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
+from typing import Iterable
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -15,7 +30,9 @@ SRC_ROOT = REPRO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
 from modular_rag_repro.logging_utils import configure_logging
+from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor
 from modular_rag_repro.settings import load_settings
+from modular_rag_repro.types import RetrievalResult
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,20 +56,79 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """运行查询命令入口。
 
-    当前阶段只验证参数解析、配置加载和日志初始化是否正常。
+    当前阶段负责把最小 Dense 查询链路跑起来：
+
+    query -> QueryProcessor -> DenseRetriever -> results
     """
     args = parse_args()
-    settings = load_settings(args.config)
+    try:
+        settings = load_settings(args.config)
+    except Exception as exc:
+        print(f"[FAIL] 配置加载失败: {exc}")
+        return 2
+
     configure_logging("DEBUG" if args.verbose else settings.observability.log_level)
 
-    print("[Phase 1] 查询命令骨架")
+    processor = QueryProcessor()
+    retriever = DenseRetriever(settings)
+
+    try:
+        processed_query = processor.process(args.query)
+        results = retriever.retrieve(
+            processed_query=processed_query,
+            collection=args.collection,
+            top_k=args.top_k,
+        )
+    except Exception as exc:
+        print(f"[FAIL] 查询执行失败: {exc}")
+        return 2
+
+    print("[*] Modular RAG Repro Query")
+    print("=" * 60)
     print(f"config={args.config}")
-    print(f"query={args.query}")
     print(f"collection={args.collection}")
     print(f"top_k={args.top_k}")
-    print(f"no_rerank={args.no_rerank}")
-    print("next_step=实现 QueryProcessor、检索器、融合与响应格式化")
+
+    if args.verbose:
+        filters_text = processed_query.filters if processed_query.filters else "(none)"
+        print(f"[INFO] ProcessedQuery normalized_text={processed_query.normalized_text}")
+        print(f"[INFO] ProcessedQuery keywords={processed_query.keywords} filters={filters_text}")
+
+    print_results(results, top_k=args.top_k)
     return 0
+
+
+def print_results(results: Iterable[RetrievalResult], top_k: int) -> None:
+    """打印查询结果。"""
+    results = list(results)
+    print("\n" + "=" * 60)
+    print(f"RESULTS (top_k={top_k}, returned={len(results)})")
+    print("=" * 60)
+
+    if not results:
+        print("[INFO] 没有命中任何结果")
+        print("=" * 60)
+        return
+
+    for index, item in enumerate(results, start=1):
+        source_path = item.metadata.get("source_path", "(unknown)")
+        chunk_index = item.metadata.get("chunk_index", "(unknown)")
+        preview = build_preview(item.text)
+
+        print(f"#{index:02d}  score={item.score:.4f}  id={item.chunk_id}")
+        print(f"     source_path={source_path}")
+        print(f"     chunk_index={chunk_index}")
+        print(f"     text={preview}")
+
+    print("=" * 60)
+
+
+def build_preview(text: str, limit: int = 180) -> str:
+    """把结果文本压成一行预览。"""
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."
 
 
 if __name__ == "__main__":

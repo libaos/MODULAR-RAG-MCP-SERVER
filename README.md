@@ -26,6 +26,10 @@
 
 - `PDF -> Document -> Chunks -> Embeddings -> BM25 -> Chroma`
 
+当前也已经进入 `Phase 3` 的第一步：
+
+- `query -> QueryProcessor -> DenseRetriever -> results`
+
 还没有完成的重点：
 
 - SHA256 去重
