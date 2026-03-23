@@ -30,6 +30,10 @@
 
 - `query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> ResponseFormatter`
 
+当前已经进入 `Phase 4` 的最小 MCP 闭环：
+
+- `MCP Server -> ProtocolHandler -> query_knowledge_hub / list_collections / get_document_summary`
+
 还没有完成的重点：
 
 - SHA256 去重
