@@ -1,17 +1,23 @@
 """摄取链路编排器。
 
-这个文件当前只做一件事：
+这个文件现在负责把最小可用的离线摄取链路串起来：
 
-- 把 `PdfLoader` 和 `DocumentChunker` 串起来
+- `PdfLoader`
+- `DocumentChunker`
+- `EmbeddingEncoder`
+- `BM25Indexer`
+- `ChromaUpserter`
 
-也就是说，它不负责：
+也就是说，当前最小闭环已经是：
 
-- 向量化
-- BM25
-- Chroma 入库
+- `PDF -> Document -> Chunks -> Embeddings -> BM25 -> Chroma`
+
+还没有接入的能力依然包括：
+
+- SHA256 去重
 - 图片落盘
-
-先把最短链路打通，再逐步把后续步骤接进来。
+- 元数据增强
+- 多阶段 Trace 持久化
 """
 
 from __future__ import annotations
@@ -19,7 +25,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from modular_rag_repro.ingestion.bm25_indexer import BM25Indexer
 from modular_rag_repro.ingestion.chunker import DocumentChunker
+from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
+from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
 from modular_rag_repro.ingestion.pdf_loader import PdfLoader
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import Chunk, Document, TraceContext
@@ -34,6 +43,8 @@ class PipelineResult:
     - 是否成功
     - 原始文档对象
     - 切分后的 chunk 列表
+    - 生成的向量数量
+    - 写入 Chroma 的数量
     - 统计信息
     - 错误信息
     """
@@ -42,6 +53,8 @@ class PipelineResult:
     file_path: str
     document: Optional[Document] = None
     chunks: List[Chunk] = field(default_factory=list)
+    vector_count: int = 0
+    upserted_count: int = 0
     error: Optional[str] = None
     stages: Dict[str, Any] = field(default_factory=dict)
 
@@ -60,11 +73,17 @@ class IngestionPipeline:
         collection: str = "default",
         loader: Optional[PdfLoader] = None,
         chunker: Optional[DocumentChunker] = None,
+        embedding_encoder: Optional[EmbeddingEncoder] = None,
+        bm25_indexer: Optional[BM25Indexer] = None,
+        chroma_upserter: Optional[ChromaUpserter] = None,
     ) -> None:
         self.settings = settings
         self.collection = collection
         self.loader = loader or PdfLoader(extract_images=True)
         self.chunker = chunker or DocumentChunker(settings)
+        self.embedding_encoder = embedding_encoder or EmbeddingEncoder(settings)
+        self.bm25_indexer = bm25_indexer or BM25Indexer(index_dir="data/db/bm25")
+        self.chroma_upserter = chroma_upserter or ChromaUpserter(settings, collection=collection)
 
     def run(self, file_path: str, trace: Optional[TraceContext] = None) -> PipelineResult:
         """执行最小摄取链路。
@@ -73,6 +92,9 @@ class IngestionPipeline:
 
         1. 读取 PDF
         2. 切分 chunk
+        3. 生成 embedding
+        4. 构建 BM25 索引
+        5. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
 
@@ -97,11 +119,41 @@ class IngestionPipeline:
             if trace is not None:
                 trace.record_stage("chunk", stages["chunk"])
 
+            vectors = self.embedding_encoder.encode_chunks(chunks)
+            stages["embed"] = {
+                "vector_count": len(vectors),
+                "vector_dim": len(vectors[0]) if vectors else 0,
+            }
+
+            if trace is not None:
+                trace.record_stage("embed", stages["embed"])
+
+            self.bm25_indexer.build(chunks, collection=self.collection)
+            stages["bm25"] = {
+                "indexed_chunks": len(chunks),
+                "index_path": str(self.bm25_indexer.get_index_path(self.collection)),
+            }
+
+            if trace is not None:
+                trace.record_stage("bm25", stages["bm25"])
+
+            upserted_count = self.chroma_upserter.upsert_chunks(chunks, vectors, collection=self.collection)
+            stages["chroma"] = {
+                "upserted_count": upserted_count,
+                "collection_count": self.chroma_upserter.get_collection_count(self.collection),
+                "persist_directory": str(self.chroma_upserter.get_persist_directory()),
+            }
+
+            if trace is not None:
+                trace.record_stage("chroma", stages["chroma"])
+
             return PipelineResult(
                 success=True,
                 file_path=file_path,
                 document=document,
                 chunks=chunks,
+                vector_count=len(vectors),
+                upserted_count=upserted_count,
                 stages=stages,
             )
         except Exception as exc:

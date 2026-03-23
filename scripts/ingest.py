@@ -5,14 +5,14 @@
 
 - 发现 PDF 文件
 - 调用 `IngestionPipeline`
+- 生成 embedding
+- 构建 BM25
+- 写入 Chroma
 - 输出每个文件的执行结果和汇总
 
 还没有接入：
 
 - SHA256 去重
-- 向量化
-- BM25
-- Chroma 入库
 """
 
 from __future__ import annotations
@@ -85,6 +85,8 @@ def print_summary(results: List[PipelineResult]) -> None:
     success_count = sum(1 for item in results if item.success)
     failed_count = total - success_count
     chunk_total = sum(item.chunk_count for item in results if item.success)
+    vector_total = sum(item.vector_count for item in results if item.success)
+    upsert_total = sum(item.upserted_count for item in results if item.success)
 
     print("\n" + "=" * 60)
     print("INGESTION SUMMARY")
@@ -93,6 +95,8 @@ def print_summary(results: List[PipelineResult]) -> None:
     print(f"successful={success_count}")
     print(f"failed={failed_count}")
     print(f"total_chunks={chunk_total}")
+    print(f"total_vectors={vector_total}")
+    print(f"total_upserted={upsert_total}")
     print("=" * 60)
 
 
@@ -101,7 +105,7 @@ def main() -> int:
 
     当前阶段负责把最小摄取链路真正跑起来：
 
-    文件 -> PdfLoader -> Document -> DocumentChunker -> PipelineResult
+    文件 -> PdfLoader -> Document -> DocumentChunker -> Embedding -> BM25 -> Chroma
     """
     args = parse_args()
     try:
@@ -153,6 +157,8 @@ def main() -> int:
             doc_id = result.document.id if result.document else "(none)"
             print(f"  [OK] doc_id={doc_id}")
             print(f"  [OK] chunk_count={result.chunk_count}")
+            print(f"  [OK] vector_count={result.vector_count}")
+            print(f"  [OK] upserted_count={result.upserted_count}")
         else:
             print(f"  [FAIL] error={result.error}")
 

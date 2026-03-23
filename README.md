@@ -20,6 +20,20 @@
 4. Dashboard
 5. Trace 与评估
 
+## 当前进度
+
+当前已经完成到 `Phase 2` 的最小离线摄取闭环：
+
+- `PDF -> Document -> Chunks -> Embeddings -> BM25 -> Chroma`
+
+还没有完成的重点：
+
+- SHA256 去重
+- Query 主链路
+- MCP tools
+- Dashboard 六页
+- Trace 与评估
+
 ## 从这里开始
 
 先看这几份文件：

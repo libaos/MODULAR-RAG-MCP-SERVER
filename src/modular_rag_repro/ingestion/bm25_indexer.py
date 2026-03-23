@@ -133,7 +133,7 @@ class BM25Indexer:
 
     def load(self, collection: str = "default") -> bool:
         """从磁盘加载索引。"""
-        path = self._get_index_path(collection)
+        path = self.get_index_path(collection)
         if not path.exists():
             return False
 
@@ -191,7 +191,7 @@ class BM25Indexer:
 
     def _save(self, collection: str) -> None:
         """把索引保存到磁盘。"""
-        path = self._get_index_path(collection)
+        path = self.get_index_path(collection)
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "metadata": self._metadata,
@@ -201,7 +201,7 @@ class BM25Indexer:
         with path.open("w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2)
 
-    def _get_index_path(self, collection: str) -> Path:
+    def get_index_path(self, collection: str) -> Path:
         """返回某个 collection 的索引文件路径。"""
         return self.index_dir / collection / "bm25_index.json"
 
