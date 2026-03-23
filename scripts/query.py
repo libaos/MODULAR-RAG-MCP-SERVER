@@ -5,11 +5,11 @@
 
 - QueryProcessor
 - DenseRetriever
-- 结果打印
+- SparseRetriever
+- 分路结果打印
 
 还没有接入：
 
-- SparseRetriever
 - RRF Fusion
 - rerank
 - 响应格式化器
@@ -30,7 +30,7 @@ SRC_ROOT = REPRO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
 from modular_rag_repro.logging_utils import configure_logging
-from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor
+from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, SparseRetriever
 from modular_rag_repro.settings import load_settings
 from modular_rag_repro.types import RetrievalResult
 
@@ -58,7 +58,7 @@ def main() -> int:
 
     当前阶段负责把最小 Dense 查询链路跑起来：
 
-    query -> QueryProcessor -> DenseRetriever -> results
+    query -> QueryProcessor -> DenseRetriever + SparseRetriever -> 分路结果
     """
     args = parse_args()
     try:
@@ -70,11 +70,17 @@ def main() -> int:
     configure_logging("DEBUG" if args.verbose else settings.observability.log_level)
 
     processor = QueryProcessor()
-    retriever = DenseRetriever(settings)
+    dense_retriever = DenseRetriever(settings)
+    sparse_retriever = SparseRetriever(settings)
 
     try:
         processed_query = processor.process(args.query)
-        results = retriever.retrieve(
+        dense_results = dense_retriever.retrieve(
+            processed_query=processed_query,
+            collection=args.collection,
+            top_k=args.top_k,
+        )
+        sparse_results = sparse_retriever.retrieve(
             processed_query=processed_query,
             collection=args.collection,
             top_k=args.top_k,
@@ -94,15 +100,16 @@ def main() -> int:
         print(f"[INFO] ProcessedQuery normalized_text={processed_query.normalized_text}")
         print(f"[INFO] ProcessedQuery keywords={processed_query.keywords} filters={filters_text}")
 
-    print_results(results, top_k=args.top_k)
+    print_result_section("DENSE RESULTS", dense_results, top_k=args.top_k)
+    print_result_section("SPARSE RESULTS", sparse_results, top_k=args.top_k)
     return 0
 
 
-def print_results(results: Iterable[RetrievalResult], top_k: int) -> None:
-    """打印查询结果。"""
+def print_result_section(title: str, results: Iterable[RetrievalResult], top_k: int) -> None:
+    """打印某一路查询结果。"""
     results = list(results)
     print("\n" + "=" * 60)
-    print(f"RESULTS (top_k={top_k}, returned={len(results)})")
+    print(f"{title} (top_k={top_k}, returned={len(results)})")
     print("=" * 60)
 
     if not results:

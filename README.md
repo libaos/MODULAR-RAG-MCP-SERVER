@@ -28,7 +28,7 @@
 
 当前也已经进入 `Phase 3` 的第一步：
 
-- `query -> QueryProcessor -> DenseRetriever -> results`
+- `query -> QueryProcessor -> DenseRetriever + SparseRetriever -> 分路结果`
 
 还没有完成的重点：
 
