@@ -7,12 +7,13 @@
 - DenseRetriever
 - SparseRetriever
 - RRF Fusion
+- ResponseFormatter
 - 分路结果与最终结果打印
 
 还没有接入：
 
 - rerank
-- 响应格式化器
+- 生成式回答
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ sys.path.insert(0, str(SRC_ROOT))
 
 from modular_rag_repro.logging_utils import configure_logging
 from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, RRFFusion, SparseRetriever
+from modular_rag_repro.response import ResponseFormatter
 from modular_rag_repro.settings import load_settings
 from modular_rag_repro.types import RetrievalResult
 
@@ -58,7 +60,7 @@ def main() -> int:
 
     当前阶段负责把最小 Hybrid 查询链路跑起来：
 
-    query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> results
+    query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> ResponseFormatter
     """
     args = parse_args()
     try:
@@ -73,6 +75,7 @@ def main() -> int:
     dense_retriever = DenseRetriever(settings)
     sparse_retriever = SparseRetriever(settings)
     fusion = RRFFusion(k=settings.retrieval.rrf_k)
+    formatter = ResponseFormatter()
 
     try:
         processed_query = processor.process(args.query)
@@ -118,6 +121,13 @@ def main() -> int:
         final_results = fusion_results
 
     print_result_section("RESULTS", final_results, top_k=args.top_k)
+    formatted_response = formatter.format(
+        query=args.query,
+        collection=args.collection,
+        results=final_results,
+    )
+    print()
+    print(formatter.render_text(formatted_response))
     return 0
 
 

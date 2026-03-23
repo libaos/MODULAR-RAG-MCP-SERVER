@@ -28,7 +28,7 @@
 
 当前也已经进入 `Phase 3` 的第一步：
 
-- `query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> 最终结果`
+- `query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> ResponseFormatter`
 
 还没有完成的重点：
 

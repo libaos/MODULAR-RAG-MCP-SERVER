@@ -109,3 +109,38 @@ class EvaluationReport:
             "aggregate_metrics": self.aggregate_metrics,
             "total_elapsed_ms": self.total_elapsed_ms,
         }
+
+
+@dataclass(slots=True)
+class QueryResponseItem:
+    """格式化后的单条查询结果。"""
+
+    rank: int
+    chunk_id: str
+    score: float
+    source_path: str
+    chunk_index: Any
+    preview: str
+
+
+@dataclass(slots=True)
+class QueryResponse:
+    """格式化后的查询响应。"""
+
+    query: str
+    collection: str
+    result_count: int
+    summary: str
+    items: List[QueryResponseItem] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为可序列化字典。"""
+        return {
+            "query": self.query,
+            "collection": self.collection,
+            "result_count": self.result_count,
+            "summary": self.summary,
+            "items": [asdict(item) for item in self.items],
+            "metadata": self.metadata,
+        }
