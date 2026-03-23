@@ -1,0 +1,75 @@
+llm:
+  provider: "ollama"
+  model: "qwen2.5:3b"
+  base_url: "http://localhost:11434"
+  temperature: 0.0
+  max_tokens: 2048
+
+embedding:
+  provider: "ollama"
+  model: "nomic-embed-text"
+  dimensions: 768
+  base_url: "http://localhost:11434"
+
+vision_llm:
+  enabled: false
+  provider: "openai"
+  model: "gpt-4o"
+  max_image_size: 2048
+
+vector_store:
+  provider: "chroma"
+  persist_directory: "./data/db/chroma"
+  collection_name: "default"
+
+retrieval:
+  dense_top_k: 20
+  sparse_top_k: 20
+  fusion_top_k: 10
+  rrf_k: 60
+
+rerank:
+  enabled: false
+  provider: "none"
+  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  top_k: 5
+
+evaluation:
+  enabled: false
+  provider: "custom"
+  metrics:
+    - "hit_rate"
+    - "mrr"
+    - "faithfulness"
+
+observability:
+  log_level: "INFO"
+  trace_enabled: true
+  trace_file: "./logs/traces.jsonl"
+  structured_logging: true
+
+ingestion:
+  # chunk_size:
+  #   每个 chunk 目标保留多少字符。
+  #   你可以把 chunk 理解成“切出来的一小段文本”。
+  #
+  # chunk_overlap:
+  #   相邻两个 chunk 之间，重复保留多少字符。
+  #   它不是新 chunk 的总长度，而是“上一个 chunk 尾巴里要拷贝多少内容到下一个 chunk 开头”。
+  #
+  # 例子:
+  #   原文: ABCDEFGHIJ
+  #   chunk_size=4, chunk_overlap=1
+  #   chunk1 = ABCD
+  #   chunk2 = DEFG
+  #   chunk3 = GHIJ
+  #
+  # 这里的 D 和 G 就是 overlap 带来的重复区域。
+  chunk_size: 1000
+  chunk_overlap: 200
+  splitter: "recursive"
+  batch_size: 100
+  chunk_refiner:
+    use_llm: false
+  metadata_enricher:
+    use_llm: false

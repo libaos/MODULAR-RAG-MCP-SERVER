@@ -28,3 +28,18 @@
 - `repro/复现任务清单.md`
 - `repro/功能矩阵.md`
 - `repro/验收矩阵.md`
+
+## 当前运行方式
+
+当前这份复现版还没有自己的独立虚拟环境，临时复用外层项目的 `.venv`。
+
+在 `repro/` 目录下可直接这样验证 Phase 1 骨架：
+
+```powershell
+..\.venv\Scripts\python.exe scripts\ingest.py --help
+..\.venv\Scripts\python.exe scripts\query.py --help
+..\.venv\Scripts\python.exe scripts\evaluate.py --help
+..\.venv\Scripts\python.exe scripts\start_dashboard.py --help
+```
+
+如果后面要继续开发，建议再单独给 `repro/` 建自己的 `.venv`。
