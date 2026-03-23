@@ -120,6 +120,55 @@ class KnowledgeCatalog:
 
         raise ValueError(f"Document '{doc_id}' not found")
 
+    def list_documents(self, collection: str) -> List[DocumentSummary]:
+        """列出某个 collection 下的所有文档摘要。"""
+        index_payload = self._load_bm25_payload(collection)
+        if index_payload is None:
+            return []
+
+        documents = index_payload.get("documents", {})
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for chunk_id, doc_info in documents.items():
+            metadata = doc_info.get("metadata", {}) or {}
+            doc_id = str(metadata.get("source_ref") or str(chunk_id).split("_000", 1)[0])
+            grouped.setdefault(doc_id, []).append(
+                {
+                    "chunk_id": chunk_id,
+                    "text": doc_info.get("text", ""),
+                    "metadata": metadata,
+                }
+            )
+
+        summaries: List[DocumentSummary] = []
+        for doc_id, chunks in grouped.items():
+            chunks.sort(key=lambda item: item["metadata"].get("chunk_index", 0))
+            first = chunks[0]
+            first_metadata = first["metadata"]
+            title = str(first_metadata.get("title") or Path(first_metadata.get("source_path", "Untitled")).stem or "Untitled")
+            source_path = str(first_metadata.get("source_path", "(unknown)"))
+            tags = self._extract_tags(first_metadata)
+            summary = self._build_summary(chunks)
+            metadata = {
+                "collection": collection,
+                "doc_type": first_metadata.get("doc_type"),
+                "page_count": first_metadata.get("page_count"),
+            }
+            summaries.append(
+                DocumentSummary(
+                    doc_id=doc_id,
+                    collection=collection,
+                    title=title,
+                    source_path=source_path,
+                    chunk_count=len(chunks),
+                    summary=summary,
+                    tags=tags,
+                    metadata={k: v for k, v in metadata.items() if v is not None},
+                )
+            )
+
+        summaries.sort(key=lambda item: (item.collection, item.title.lower(), item.doc_id))
+        return summaries
+
     def _list_chroma_collections(self) -> List[CollectionSummary]:
         """读取 Chroma 中的 collection。"""
         if not self.chroma_dir.exists():

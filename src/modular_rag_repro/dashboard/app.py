@@ -1,18 +1,24 @@
-"""Phase 1 的 Streamlit 占位页面。"""
+"""复现版 Dashboard 应用入口。"""
 
 from __future__ import annotations
 
 import streamlit as st
 
+from modular_rag_repro.dashboard.pages import PAGE_OPTIONS, render_page
+from modular_rag_repro.dashboard.services import DashboardService
+
 
 def main() -> None:
-    """渲染最小 Dashboard 页面。
+    """渲染最小六页 Dashboard。"""
+    st.set_page_config(page_title="Modular RAG Repro Dashboard", page_icon="📚", layout="wide")
+    service = DashboardService()
 
-    当前阶段先验证 Streamlit 启动链路，真正的六页结构后面再补。
-    """
-    st.set_page_config(page_title="Modular RAG Repro", page_icon="📚", layout="wide")
-    st.title("Modular RAG Repro")
-    st.info("Phase 1 骨架已经就绪，后续阶段再补完整 Dashboard 页面。")
+    st.sidebar.title("Modular RAG Repro")
+    page_name = st.sidebar.radio("Pages", PAGE_OPTIONS, index=0)
+    st.sidebar.caption(f"当前页面: {page_name}")
+    st.sidebar.caption(f"默认 collection: {service.settings.vector_store.collection_name}")
+
+    render_page(page_name, service)
 
 
 if __name__ == "__main__":

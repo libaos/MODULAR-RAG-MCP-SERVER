@@ -34,6 +34,10 @@
 
 - `MCP Server -> ProtocolHandler -> query_knowledge_hub / list_collections / get_document_summary`
 
+当前也已经进入 `Phase 5` 的最小 Dashboard 闭环：
+
+- `Overview / Data Browser / Ingestion Manager / Ingestion Traces / Query Traces / Evaluation Panel`
+
 还没有完成的重点：
 
 - SHA256 去重
