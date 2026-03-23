@@ -6,11 +6,11 @@
 - QueryProcessor
 - DenseRetriever
 - SparseRetriever
-- 分路结果打印
+- RRF Fusion
+- 分路结果与最终结果打印
 
 还没有接入：
 
-- RRF Fusion
 - rerank
 - 响应格式化器
 """
@@ -30,7 +30,7 @@ SRC_ROOT = REPRO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
 from modular_rag_repro.logging_utils import configure_logging
-from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, SparseRetriever
+from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, RRFFusion, SparseRetriever
 from modular_rag_repro.settings import load_settings
 from modular_rag_repro.types import RetrievalResult
 
@@ -56,9 +56,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     """运行查询命令入口。
 
-    当前阶段负责把最小 Dense 查询链路跑起来：
+    当前阶段负责把最小 Hybrid 查询链路跑起来：
 
-    query -> QueryProcessor -> DenseRetriever + SparseRetriever -> 分路结果
+    query -> QueryProcessor -> DenseRetriever + SparseRetriever -> RRF Fusion -> results
     """
     args = parse_args()
     try:
@@ -72,6 +72,7 @@ def main() -> int:
     processor = QueryProcessor()
     dense_retriever = DenseRetriever(settings)
     sparse_retriever = SparseRetriever(settings)
+    fusion = RRFFusion(k=settings.retrieval.rrf_k)
 
     try:
         processed_query = processor.process(args.query)
@@ -83,6 +84,10 @@ def main() -> int:
         sparse_results = sparse_retriever.retrieve(
             processed_query=processed_query,
             collection=args.collection,
+            top_k=args.top_k,
+        )
+        fusion_results = fusion.fuse(
+            ranking_lists=[dense_results, sparse_results],
             top_k=args.top_k,
         )
     except Exception as exc:
@@ -102,6 +107,17 @@ def main() -> int:
 
     print_result_section("DENSE RESULTS", dense_results, top_k=args.top_k)
     print_result_section("SPARSE RESULTS", sparse_results, top_k=args.top_k)
+    print_result_section("FUSION RESULTS", fusion_results, top_k=args.top_k)
+
+    if args.no_rerank or not settings.rerank.enabled:
+        print("[INFO] Reranking disabled by settings.")
+        final_results = fusion_results
+    else:
+        # 当前阶段还没实现 rerank，这里先保留接口和回退逻辑。
+        print("[INFO] Reranker not implemented yet, fallback to fusion results.")
+        final_results = fusion_results
+
+    print_result_section("RESULTS", final_results, top_k=args.top_k)
     return 0
 
 
