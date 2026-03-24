@@ -63,3 +63,27 @@ def test_ingestion_pipeline_applies_chunk_refiner(test_settings, unique_collecti
         assert result.stages["refine"]["changed_chunk_count"] == 1
     finally:
         cleanup_collection(test_settings, unique_collection)
+
+
+def test_ingestion_pipeline_applies_metadata_enricher(test_settings, unique_collection: str) -> None:
+    """摄取链路应在 embedding 前补齐规则元数据。"""
+    cleanup_collection(test_settings, unique_collection)
+    pipeline = IngestionPipeline(
+        test_settings,
+        collection=unique_collection,
+        loader=DirtyTextLoader(),
+    )
+
+    try:
+        result = pipeline.run(str(SAMPLE_PDF))
+
+        assert result.success is True
+        assert result.chunk_count == 1
+        assert result.chunks[0].metadata["enriched_by"] == "rule"
+        assert result.chunks[0].metadata["title"] == "dirty-case"
+        assert result.chunks[0].metadata["summary"] == "Hello world next"
+        assert result.chunks[0].metadata["has_images"] is False
+        assert "hello" in result.chunks[0].metadata["tags"]
+        assert result.stages["enrich"]["sample_title"] == "dirty-case"
+    finally:
+        cleanup_collection(test_settings, unique_collection)

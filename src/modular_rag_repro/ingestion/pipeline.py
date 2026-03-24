@@ -5,13 +5,14 @@
 - `PdfLoader`
 - `DocumentChunker`
 - `ChunkRefiner`
+- `MetadataEnricher`
 - `EmbeddingEncoder`
 - `BM25Indexer`
 - `ChromaUpserter`
 
 也就是说，当前最小闭环已经是：
 
-- `PDF -> Document -> Chunks -> ChunkRefiner -> Embeddings -> BM25 -> Chroma`
+- `PDF -> Document -> Chunks -> ChunkRefiner -> MetadataEnricher -> Embeddings -> BM25 -> Chroma`
 
 还没有接入的能力依然包括：
 
@@ -32,6 +33,7 @@ from modular_rag_repro.ingestion.chunk_refiner import ChunkRefiner
 from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
 from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
 from modular_rag_repro.ingestion.file_integrity import SQLiteIntegrityChecker
+from modular_rag_repro.ingestion.metadata_enricher import MetadataEnricher
 from modular_rag_repro.ingestion.pdf_loader import PdfLoader
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import Chunk, Document, TraceContext
@@ -80,6 +82,7 @@ class IngestionPipeline:
         loader: Optional[PdfLoader] = None,
         chunker: Optional[DocumentChunker] = None,
         chunk_refiner: Optional[ChunkRefiner] = None,
+        metadata_enricher: Optional[MetadataEnricher] = None,
         embedding_encoder: Optional[EmbeddingEncoder] = None,
         bm25_indexer: Optional[BM25Indexer] = None,
         chroma_upserter: Optional[ChromaUpserter] = None,
@@ -90,6 +93,7 @@ class IngestionPipeline:
         self.loader = loader or PdfLoader(extract_images=True)
         self.chunker = chunker or DocumentChunker(settings)
         self.chunk_refiner = chunk_refiner or ChunkRefiner(settings)
+        self.metadata_enricher = metadata_enricher or MetadataEnricher(settings)
         self.embedding_encoder = embedding_encoder or EmbeddingEncoder(settings)
         self.bm25_indexer = bm25_indexer or BM25Indexer(index_dir="data/db/bm25")
         self.chroma_upserter = chroma_upserter or ChromaUpserter(settings, collection=collection)
@@ -109,9 +113,10 @@ class IngestionPipeline:
         2. 读取 PDF
         3. 切分 chunk
         4. 规则清洗 chunk
-        5. 生成 embedding
-        6. 构建 BM25 索引
-        7. 写入 Chroma
+        5. 增强 chunk 元数据
+        6. 生成 embedding
+        7. 构建 BM25 索引
+        8. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
         file_hash: str | None = None
@@ -174,6 +179,19 @@ class IngestionPipeline:
 
             if trace is not None:
                 trace.record_stage("refine", stages["refine"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
+
+            stage_t0 = perf_counter()
+            chunks = self.metadata_enricher.enrich_chunks(chunks)
+            stages["enrich"] = {
+                "chunk_count": len(chunks),
+                "enriched_by": "rule",
+                "sample_title": chunks[0].metadata.get("title") if chunks else None,
+                "sample_tags": chunks[0].metadata.get("tags") if chunks else [],
+                "use_llm": self.metadata_enricher.use_llm,
+            }
+
+            if trace is not None:
+                trace.record_stage("enrich", stages["enrich"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
             stage_t0 = perf_counter()
             vectors = self.embedding_encoder.encode_chunks(chunks)
