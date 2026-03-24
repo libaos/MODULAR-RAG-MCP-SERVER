@@ -14,7 +14,6 @@
 
 还没有接入的能力依然包括：
 
-- SHA256 去重
 - 图片落盘
 - 元数据增强
 - 多阶段 Trace 持久化
@@ -30,6 +29,7 @@ from modular_rag_repro.ingestion.bm25_indexer import BM25Indexer
 from modular_rag_repro.ingestion.chunker import DocumentChunker
 from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
 from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
+from modular_rag_repro.ingestion.file_integrity import SQLiteIntegrityChecker
 from modular_rag_repro.ingestion.pdf_loader import PdfLoader
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import Chunk, Document, TraceContext
@@ -52,10 +52,13 @@ class PipelineResult:
 
     success: bool
     file_path: str
+    file_hash: Optional[str] = None
     document: Optional[Document] = None
     chunks: List[Chunk] = field(default_factory=list)
     vector_count: int = 0
     upserted_count: int = 0
+    skipped: bool = False
+    skip_reason: Optional[str] = None
     error: Optional[str] = None
     stages: Dict[str, Any] = field(default_factory=dict)
 
@@ -77,6 +80,7 @@ class IngestionPipeline:
         embedding_encoder: Optional[EmbeddingEncoder] = None,
         bm25_indexer: Optional[BM25Indexer] = None,
         chroma_upserter: Optional[ChromaUpserter] = None,
+        integrity_checker: Optional[SQLiteIntegrityChecker] = None,
     ) -> None:
         self.settings = settings
         self.collection = collection
@@ -85,21 +89,52 @@ class IngestionPipeline:
         self.embedding_encoder = embedding_encoder or EmbeddingEncoder(settings)
         self.bm25_indexer = bm25_indexer or BM25Indexer(index_dir="data/db/bm25")
         self.chroma_upserter = chroma_upserter or ChromaUpserter(settings, collection=collection)
+        self.integrity_checker = integrity_checker or SQLiteIntegrityChecker(settings.ingestion.integrity_db_path)
 
-    def run(self, file_path: str, trace: Optional[TraceContext] = None) -> PipelineResult:
+    def run(
+        self,
+        file_path: str,
+        trace: Optional[TraceContext] = None,
+        force: bool = False,
+    ) -> PipelineResult:
         """执行最小摄取链路。
 
         当前顺序固定为：
 
-        1. 读取 PDF
-        2. 切分 chunk
-        3. 生成 embedding
-        4. 构建 BM25 索引
-        5. 写入 Chroma
+        1. 做 SHA256 幂等检查
+        2. 读取 PDF
+        3. 切分 chunk
+        4. 生成 embedding
+        5. 构建 BM25 索引
+        6. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
+        file_hash: str | None = None
 
         try:
+            stage_t0 = perf_counter()
+            file_hash = self.integrity_checker.compute_sha256(file_path)
+            should_skip = (not force) and self.integrity_checker.should_skip(file_hash, self.collection)
+            stages["integrity"] = {
+                "file_hash": file_hash,
+                "collection": self.collection,
+                "force": force,
+                "should_skip": should_skip,
+            }
+
+            if trace is not None:
+                trace.record_stage("integrity", stages["integrity"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
+
+            if should_skip:
+                return PipelineResult(
+                    success=True,
+                    file_path=file_path,
+                    file_hash=file_hash,
+                    skipped=True,
+                    skip_reason="already_processed",
+                    stages=stages,
+                )
+
             stage_t0 = perf_counter()
             document = self.loader.load(file_path)
             stages["load"] = {
@@ -153,9 +188,13 @@ class IngestionPipeline:
             if trace is not None:
                 trace.record_stage("chroma", stages["chroma"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
+            if file_hash is not None:
+                self.integrity_checker.mark_success(file_hash, file_path, self.collection)
+
             return PipelineResult(
                 success=True,
                 file_path=file_path,
+                file_hash=file_hash,
                 document=document,
                 chunks=chunks,
                 vector_count=len(vectors),
@@ -163,9 +202,12 @@ class IngestionPipeline:
                 stages=stages,
             )
         except Exception as exc:
+            if file_hash is not None:
+                self.integrity_checker.mark_failed(file_hash, file_path, self.collection, str(exc))
             return PipelineResult(
                 success=False,
                 file_path=file_path,
+                file_hash=file_hash,
                 error=str(exc),
                 stages=stages,
             )

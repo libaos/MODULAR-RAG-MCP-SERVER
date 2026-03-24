@@ -106,6 +106,7 @@ class IngestionSettings:
     chunk_overlap: int = 200
     splitter: str = "recursive"
     batch_size: int = 100
+    integrity_db_path: str = "./data/db/ingestion_history/history.sqlite3"
     chunk_refiner: RefinerSettings = field(default_factory=RefinerSettings)
     metadata_enricher: RefinerSettings = field(default_factory=RefinerSettings)
 
@@ -164,6 +165,7 @@ def load_settings(config_path: str | None = None) -> Settings:
             chunk_overlap=ingestion_raw.get("chunk_overlap", 200),
             splitter=ingestion_raw.get("splitter", "recursive"),
             batch_size=ingestion_raw.get("batch_size", 100),
+            integrity_db_path=ingestion_raw.get("integrity_db_path", "./data/db/ingestion_history/history.sqlite3"),
             chunk_refiner=RefinerSettings(**chunk_refiner_raw),
             metadata_enricher=RefinerSettings(**metadata_enricher_raw),
         ),

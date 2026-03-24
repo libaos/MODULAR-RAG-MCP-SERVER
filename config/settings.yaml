@@ -69,6 +69,7 @@ ingestion:
   chunk_overlap: 200
   splitter: "recursive"
   batch_size: 100
+  integrity_db_path: "./data/db/ingestion_history/history.sqlite3"
   chunk_refiner:
     use_llm: false
   metadata_enricher:

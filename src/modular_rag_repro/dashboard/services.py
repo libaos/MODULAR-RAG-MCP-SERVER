@@ -108,6 +108,9 @@ class DashboardService:
             )
             result = pipeline.run(str(temp_path), trace=trace)
             trace.metadata["success"] = result.success
+            trace.metadata["file_hash"] = result.file_hash
+            trace.metadata["skipped"] = result.skipped
+            trace.metadata["skip_reason"] = result.skip_reason
             trace.metadata["document_id"] = result.document.id if result.document else None
             trace.metadata["chunk_count"] = result.chunk_count
             trace.metadata["vector_count"] = result.vector_count
@@ -177,9 +180,12 @@ class DashboardService:
             "success": result.success,
             "file_path": result.file_path,
             "document_id": result.document.id if result.document else None,
+            "file_hash": result.file_hash,
             "chunk_count": result.chunk_count,
             "vector_count": result.vector_count,
             "upserted_count": result.upserted_count,
+            "skipped": result.skipped,
+            "skip_reason": result.skip_reason,
             "error": result.error,
             "stages": result.stages,
         }

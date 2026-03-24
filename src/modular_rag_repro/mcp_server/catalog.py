@@ -106,6 +106,7 @@ class KnowledgeCatalog:
                     "collection": collection_name,
                     "doc_type": first_metadata.get("doc_type"),
                     "page_count": first_metadata.get("page_count"),
+                    "doc_hash": first_metadata.get("doc_hash"),
                 }
                 return DocumentSummary(
                     doc_id=str(first_metadata.get("source_ref", doc_id)),
@@ -152,6 +153,7 @@ class KnowledgeCatalog:
                 "collection": collection,
                 "doc_type": first_metadata.get("doc_type"),
                 "page_count": first_metadata.get("page_count"),
+                "doc_hash": first_metadata.get("doc_hash"),
             }
             summaries.append(
                 DocumentSummary(

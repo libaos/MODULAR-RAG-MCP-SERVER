@@ -4,15 +4,12 @@
 当前阶段已经接入最小摄取链路：
 
 - 发现 PDF 文件
+- SHA256 去重
 - 调用 `IngestionPipeline`
 - 生成 embedding
 - 构建 BM25
 - 写入 Chroma
 - 输出每个文件的执行结果和汇总
-
-还没有接入：
-
-- SHA256 去重
 """
 
 from __future__ import annotations
@@ -84,17 +81,19 @@ def discover_files(path_value: str, extensions: List[str] | None = None) -> List
 def print_summary(results: List[PipelineResult]) -> None:
     """打印执行汇总。"""
     total = len(results)
-    success_count = sum(1 for item in results if item.success)
-    failed_count = total - success_count
-    chunk_total = sum(item.chunk_count for item in results if item.success)
-    vector_total = sum(item.vector_count for item in results if item.success)
-    upsert_total = sum(item.upserted_count for item in results if item.success)
+    success_count = sum(1 for item in results if item.success and not item.skipped)
+    skipped_count = sum(1 for item in results if item.skipped)
+    failed_count = sum(1 for item in results if not item.success)
+    chunk_total = sum(item.chunk_count for item in results if item.success and not item.skipped)
+    vector_total = sum(item.vector_count for item in results if item.success and not item.skipped)
+    upsert_total = sum(item.upserted_count for item in results if item.success and not item.skipped)
 
     print("\n" + "=" * 60)
     print("INGESTION SUMMARY")
     print("=" * 60)
     print(f"total_files={total}")
     print(f"successful={success_count}")
+    print(f"skipped={skipped_count}")
     print(f"failed={failed_count}")
     print(f"total_chunks={chunk_total}")
     print(f"total_vectors={vector_total}")
@@ -143,9 +142,6 @@ def main() -> int:
         print("[INFO] dry-run 模式，不执行实际摄取")
         return 0
 
-    if args.force:
-        print("[INFO] 当前阶段尚未接入 SHA256 去重，force 参数暂时只保留接口含义")
-
     pipeline = IngestionPipeline(settings, collection=args.collection)
     trace_collector = TraceCollector(settings.observability.trace_file)
     results: List[PipelineResult] = []
@@ -159,12 +155,16 @@ def main() -> int:
                 "source": "cli",
                 "collection": args.collection,
                 "file_path": str(file_path),
+                "force": args.force,
             },
         )
-        result = pipeline.run(str(file_path), trace=trace)
+        result = pipeline.run(str(file_path), trace=trace, force=args.force)
         results.append(result)
 
         trace.metadata["success"] = result.success
+        trace.metadata["file_hash"] = result.file_hash
+        trace.metadata["skipped"] = result.skipped
+        trace.metadata["skip_reason"] = result.skip_reason
         trace.metadata["document_id"] = result.document.id if result.document else None
         trace.metadata["chunk_count"] = result.chunk_count
         trace.metadata["vector_count"] = result.vector_count
@@ -174,9 +174,13 @@ def main() -> int:
         if settings.observability.trace_enabled:
             trace_collector.collect(trace)
 
-        if result.success:
+        if result.skipped:
+            print(f"  [SKIP] reason={result.skip_reason}")
+            print(f"  [SKIP] file_hash={result.file_hash}")
+        elif result.success:
             doc_id = result.document.id if result.document else "(none)"
             print(f"  [OK] doc_id={doc_id}")
+            print(f"  [OK] file_hash={result.file_hash}")
             print(f"  [OK] chunk_count={result.chunk_count}")
             print(f"  [OK] vector_count={result.vector_count}")
             print(f"  [OK] upserted_count={result.upserted_count}")

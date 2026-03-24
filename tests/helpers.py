@@ -33,8 +33,10 @@ def make_temp_config(tmp_path: Path) -> Path:
 
     chroma_dir = (tmp_path / "chroma").resolve()
     trace_file = (tmp_path / "logs" / "traces.jsonl").resolve()
+    integrity_db = (tmp_path / "ingestion_history" / "history.sqlite3").resolve()
     payload["vector_store"]["persist_directory"] = str(chroma_dir)
     payload["observability"]["trace_file"] = str(trace_file)
+    payload["ingestion"]["integrity_db_path"] = str(integrity_db)
 
     config_path = tmp_path / "settings.test.yaml"
     config_path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")

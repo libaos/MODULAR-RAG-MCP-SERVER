@@ -4,6 +4,7 @@ from .bm25_indexer import BM25Indexer
 from .chunker import DocumentChunker
 from .chroma_upserter import ChromaUpserter
 from .embedding_encoder import EmbeddingEncoder
+from .file_integrity import SQLiteIntegrityChecker
 from .pipeline import IngestionPipeline, PipelineResult
 from .pdf_loader import PdfLoader
 
@@ -13,6 +14,7 @@ __all__ = [
     "EmbeddingEncoder",
     "BM25Indexer",
     "ChromaUpserter",
+    "SQLiteIntegrityChecker",
     "IngestionPipeline",
     "PipelineResult",
 ]
