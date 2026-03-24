@@ -15,7 +15,6 @@
 它现在还不负责：
 
 - 增量更新优化
-- 删除文档后的重建
 - 与 Dense 检索融合
 """
 
@@ -133,16 +132,76 @@ class BM25Indexer:
 
     def load(self, collection: str = "default") -> bool:
         """从磁盘加载索引。"""
-        path = self.get_index_path(collection)
-        if not path.exists():
+        payload = self.load_payload(collection)
+        if payload is None:
             return False
-
-        with path.open("r", encoding="utf-8") as fh:
-            payload = json.load(fh)
 
         self._metadata = payload["metadata"]
         self._documents = payload["documents"]
         self._index = payload["index"]
+        return True
+
+    def load_payload(self, collection: str = "default") -> Dict[str, Any] | None:
+        """直接读取索引 JSON，供删除/重建场景复用。"""
+        path = self.get_index_path(collection)
+        if not path.exists():
+            return None
+
+        with path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def load_chunks(self, collection: str = "default") -> List[Chunk]:
+        """把磁盘中的 BM25 文档区恢复成 Chunk 列表。"""
+        payload = self.load_payload(collection)
+        if payload is None:
+            return []
+
+        chunks: List[Chunk] = []
+        documents = payload.get("documents", {})
+        for chunk_id, doc_info in documents.items():
+            metadata = dict(doc_info.get("metadata", {}) or {})
+            document_id = str(metadata.get("source_ref") or str(chunk_id).split("_000", 1)[0])
+            chunks.append(
+                Chunk(
+                    id=str(chunk_id),
+                    document_id=document_id,
+                    text=str(doc_info.get("text", "")),
+                    metadata=metadata,
+                )
+            )
+
+        chunks.sort(key=lambda item: (item.metadata.get("chunk_index", 0), item.id))
+        return chunks
+
+    def rebuild_from_chunks(self, chunks: List[Chunk], collection: str = "default") -> int:
+        """基于当前剩余 chunk 重建索引。
+
+        这是文档删除后的最小重建钩子：
+
+        - 还有 chunk：直接重新 build
+        - 没有 chunk：删除索引文件
+        """
+        if chunks:
+            self.build(chunks, collection=collection)
+            return len(chunks)
+
+        self.delete_index(collection)
+        self._index = {}
+        self._documents = {}
+        self._metadata = {}
+        return 0
+
+    def delete_index(self, collection: str = "default") -> bool:
+        """删除某个 collection 的 BM25 索引文件。"""
+        path = self.get_index_path(collection)
+        if not path.exists():
+            return False
+
+        path.unlink()
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
         return True
 
     def query(self, query_text: str, top_k: int = 10) -> List[RetrievalResult]:

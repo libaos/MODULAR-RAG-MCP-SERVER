@@ -64,7 +64,61 @@ class ChromaUpserter:
 
     def get_collection_count(self, collection: str | None = None) -> int:
         """返回当前 collection 中的向量条数。"""
-        return self._get_collection(collection).count()
+        chroma_collection = self._get_existing_collection(collection)
+        if chroma_collection is None:
+            return 0
+        return chroma_collection.count()
+
+    def delete_chunks(self, chunk_ids: List[str], collection: str | None = None) -> int:
+        """按 chunk_id 删除一批向量。"""
+        if not chunk_ids:
+            return 0
+
+        chroma_collection = self._get_existing_collection(collection)
+        if chroma_collection is None:
+            return 0
+
+        chroma_collection.delete(ids=chunk_ids)
+        return len(chunk_ids)
+
+    def delete_collection(self, collection: str | None = None) -> bool:
+        """删除整个 collection。"""
+        collection_name = collection or self.default_collection
+        if self._get_existing_collection(collection_name) is None:
+            return False
+
+        self.client.delete_collection(name=collection_name)
+        return True
+
+    def export_chunks(self, collection: str | None = None) -> List[Chunk]:
+        """从 Chroma 导出当前 collection 的全部 chunk。
+
+        删除后重建 BM25 时，会把 Chroma 作为当前真值来源。
+        """
+        chroma_collection = self._get_existing_collection(collection)
+        if chroma_collection is None:
+            return []
+
+        payload = chroma_collection.get(include=["documents", "metadatas"])
+        ids = payload.get("ids", []) or []
+        documents = payload.get("documents", []) or []
+        metadatas = payload.get("metadatas", []) or []
+
+        chunks: List[Chunk] = []
+        for chunk_id, text, metadata in zip(ids, documents, metadatas):
+            clean_metadata = self._restore_metadata(metadata or {})
+            document_id = str(clean_metadata.get("source_ref") or str(chunk_id).split("_000", 1)[0])
+            chunks.append(
+                Chunk(
+                    id=str(chunk_id),
+                    document_id=document_id,
+                    text=str(text or ""),
+                    metadata=clean_metadata,
+                )
+            )
+
+        chunks.sort(key=lambda item: (item.metadata.get("chunk_index", 0), item.id))
+        return chunks
 
     def get_persist_directory(self) -> Path:
         """返回 Chroma 数据目录。"""
@@ -77,6 +131,14 @@ class ChromaUpserter:
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
+
+    def _get_existing_collection(self, collection: str | None = None):
+        """只读取已存在的 collection，不隐式创建。"""
+        collection_name = collection or self.default_collection
+        try:
+            return self.client.get_collection(name=collection_name)
+        except Exception:
+            return None
 
     def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """把复杂 metadata 转成 Chroma 可接受的简单标量。"""
@@ -94,3 +156,22 @@ class ChromaUpserter:
             sanitized[clean_key] = json.dumps(value, ensure_ascii=False, sort_keys=True)
 
         return sanitized
+
+    def _restore_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """把导出的 metadata 尽量还原成原始结构。"""
+        restored: Dict[str, Any] = {}
+        for key, value in metadata.items():
+            if not isinstance(value, str):
+                restored[key] = value
+                continue
+
+            text = value.strip()
+            if text and text[0] in "[{":
+                try:
+                    restored[key] = json.loads(value)
+                    continue
+                except json.JSONDecodeError:
+                    pass
+
+            restored[key] = value
+        return restored

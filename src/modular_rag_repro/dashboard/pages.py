@@ -100,6 +100,26 @@ def render_data_browser(service: DashboardService) -> None:
             st.markdown(f"**来源**: `{doc['source_path']}`")
             st.markdown(f"**摘要**: {doc['summary']}")
 
+    with st.expander("删除文档", expanded=False):
+        doc_labels = [f"{item['title']} ({item['collection']})" for item in documents]
+        selected_label = st.selectbox("选择要删除的文档", doc_labels, key="delete_doc_label")
+        selected_index = doc_labels.index(selected_label)
+        selected_doc = documents[selected_index]
+
+        st.caption("删除会同步清理当前文档在 Chroma 和 BM25 中的数据。")
+        if st.button("Delete Document", type="secondary"):
+            result = service.delete_document(
+                doc_id=selected_doc["doc_id"],
+                collection=selected_doc["collection"],
+            )
+            st.session_state["last_delete_result"] = result
+            st.rerun()
+
+    delete_result = st.session_state.get("last_delete_result")
+    if delete_result:
+        st.subheader("Last Delete Result")
+        st.json(delete_result)
+
 
 def render_ingestion_manager(service: DashboardService) -> None:
     """渲染摄取管理页。"""

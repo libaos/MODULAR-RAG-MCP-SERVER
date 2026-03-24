@@ -12,12 +12,11 @@ from __future__ import annotations
 
 import json
 import tempfile
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modular_rag_repro.ingestion import IngestionPipeline, PipelineResult
-from modular_rag_repro.mcp_server.catalog import KnowledgeCatalog
+from modular_rag_repro.management import DocumentManager
 from modular_rag_repro.settings import Settings, load_settings, resolve_path
 from modular_rag_repro.trace import TraceCollector
 from modular_rag_repro.types import TraceContext
@@ -28,7 +27,8 @@ class DashboardService:
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or load_settings()
-        self.catalog = KnowledgeCatalog(self.settings)
+        self.document_manager = DocumentManager(self.settings)
+        self.catalog = self.document_manager.catalog
         self.trace_file = resolve_path(self.settings.observability.trace_file)
         self.evaluation_dir = resolve_path("data/evaluation")
 
@@ -143,6 +143,11 @@ class DashboardService:
     def read_traces_by_type(self, trace_type: str) -> List[Dict[str, Any]]:
         """按 trace_type 过滤 trace。"""
         return [record for record in self.read_traces() if record.get("trace_type") == trace_type]
+
+    def delete_document(self, doc_id: str, collection: str) -> Dict[str, Any]:
+        """删除某个文档，并返回删除结果。"""
+        result = self.document_manager.delete_document(doc_id=doc_id, collection=collection)
+        return result.to_dict()
 
     def list_evaluation_reports(self) -> List[Dict[str, Any]]:
         """读取评估报告目录。"""

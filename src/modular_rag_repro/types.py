@@ -150,3 +150,28 @@ class QueryResponse:
             "items": [asdict(item) for item in self.items],
             "metadata": self.metadata,
         }
+
+
+@dataclass(slots=True)
+class DeleteDocumentResult:
+    """文档删除结果。"""
+
+    doc_id: str
+    collection: str
+    deleted_chunk_ids: List[str] = field(default_factory=list)
+    chroma_deleted_count: int = 0
+    bm25_remaining_count: int = 0
+    collection_removed: bool = False
+    rebuilt: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为可序列化字典。"""
+        return {
+            "doc_id": self.doc_id,
+            "collection": self.collection,
+            "deleted_chunk_ids": self.deleted_chunk_ids,
+            "chroma_deleted_count": self.chroma_deleted_count,
+            "bm25_remaining_count": self.bm25_remaining_count,
+            "collection_removed": self.collection_removed,
+            "rebuilt": self.rebuilt,
+        }
