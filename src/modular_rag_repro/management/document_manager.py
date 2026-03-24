@@ -10,7 +10,7 @@ Phase 7 从这里开始补：
 
 from __future__ import annotations
 
-from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, SQLiteIntegrityChecker
+from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, ImageStorage, SQLiteIntegrityChecker
 from modular_rag_repro.mcp_server.catalog import CollectionSummary, DocumentSummary, KnowledgeCatalog
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import DeleteDocumentResult
@@ -24,6 +24,10 @@ class DocumentManager:
         self.catalog = KnowledgeCatalog(settings)
         self.bm25 = BM25Indexer()
         self.chroma = ChromaUpserter(settings)
+        self.image_storage = ImageStorage(
+            db_path=settings.ingestion.image_index_db_path,
+            images_root=settings.ingestion.images_root_dir,
+        )
         self.integrity = SQLiteIntegrityChecker(settings.ingestion.integrity_db_path)
 
     def list_collections(self, include_stats: bool = True) -> list[CollectionSummary]:
@@ -71,6 +75,8 @@ class DocumentManager:
             collection_removed = self.chroma.delete_collection(target_collection)
 
         doc_hash = summary.metadata.get("doc_hash")
+        if doc_hash:
+            self.image_storage.delete_document_images(str(doc_hash), target_collection)
         if doc_hash:
             self.integrity.remove_record(str(doc_hash), target_collection)
 

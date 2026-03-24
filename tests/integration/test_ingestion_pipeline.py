@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, IngestionPipeline
 from modular_rag_repro.types import Document
-from helpers import SAMPLE_PDF, cleanup_collection
+from helpers import SAMPLE_PDF, WITH_IMAGES_PDF, cleanup_collection
 
 
 def test_ingestion_pipeline_persists_bm25_and_chroma(test_settings, unique_collection: str) -> None:
@@ -85,5 +85,22 @@ def test_ingestion_pipeline_applies_metadata_enricher(test_settings, unique_coll
         assert result.chunks[0].metadata["has_images"] is False
         assert "hello" in result.chunks[0].metadata["tags"]
         assert result.stages["enrich"]["sample_title"] == "dirty-case"
+    finally:
+        cleanup_collection(test_settings, unique_collection)
+
+
+def test_ingestion_pipeline_stores_images_for_pdf_with_images(test_settings, unique_collection: str) -> None:
+    """带图 PDF 进入 pipeline 后应真正落盘图片并建立索引。"""
+    cleanup_collection(test_settings, unique_collection)
+    pipeline = IngestionPipeline(test_settings, collection=unique_collection)
+
+    try:
+        result = pipeline.run(str(WITH_IMAGES_PDF))
+
+        assert result.success is True
+        assert result.image_count >= 1
+        assert result.stages["images"]["image_count"] >= 1
+        assert result.document is not None
+        assert result.document.metadata["images"][0]["file_path"]
     finally:
         cleanup_collection(test_settings, unique_collection)

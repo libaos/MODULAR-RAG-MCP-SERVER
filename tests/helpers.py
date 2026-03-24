@@ -12,13 +12,14 @@ from uuid import uuid4
 
 import yaml
 
-from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, IngestionPipeline
+from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, ImageStorage, IngestionPipeline
 from modular_rag_repro.settings import load_settings
 
 
 REPRO_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = REPRO_ROOT.parent
 SAMPLE_PDF = WORKSPACE_ROOT / "tests" / "fixtures" / "sample_documents" / "simple.pdf"
+WITH_IMAGES_PDF = WORKSPACE_ROOT / "tests" / "fixtures" / "sample_documents" / "with_images.pdf"
 
 
 def unique_collection_name(prefix: str = "repro-test") -> str:
@@ -34,9 +35,13 @@ def make_temp_config(tmp_path: Path) -> Path:
     chroma_dir = (tmp_path / "chroma").resolve()
     trace_file = (tmp_path / "logs" / "traces.jsonl").resolve()
     integrity_db = (tmp_path / "ingestion_history" / "history.sqlite3").resolve()
+    image_index_db = (tmp_path / "image_index" / "images.sqlite3").resolve()
+    images_root = (tmp_path / "images").resolve()
     payload["vector_store"]["persist_directory"] = str(chroma_dir)
     payload["observability"]["trace_file"] = str(trace_file)
     payload["ingestion"]["integrity_db_path"] = str(integrity_db)
+    payload["ingestion"]["image_index_db_path"] = str(image_index_db)
+    payload["ingestion"]["images_root_dir"] = str(images_root)
 
     config_path = tmp_path / "settings.test.yaml"
     config_path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -65,6 +70,14 @@ def cleanup_collection(settings, collection: str) -> None:
 
     try:
         BM25Indexer().delete_index(collection)
+    except Exception:
+        pass
+
+    try:
+        ImageStorage(
+            db_path=settings.ingestion.image_index_db_path,
+            images_root=settings.ingestion.images_root_dir,
+        ).delete_collection(collection)
     except Exception:
         pass
 

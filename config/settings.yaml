@@ -70,6 +70,8 @@ ingestion:
   splitter: "recursive"
   batch_size: 100
   integrity_db_path: "./data/db/ingestion_history/history.sqlite3"
+  image_index_db_path: "./data/db/image_index/images.sqlite3"
+  images_root_dir: "./data/images"
   chunk_refiner:
     use_llm: false
   metadata_enricher:

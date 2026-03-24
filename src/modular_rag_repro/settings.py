@@ -107,6 +107,8 @@ class IngestionSettings:
     splitter: str = "recursive"
     batch_size: int = 100
     integrity_db_path: str = "./data/db/ingestion_history/history.sqlite3"
+    image_index_db_path: str = "./data/db/image_index/images.sqlite3"
+    images_root_dir: str = "./data/images"
     chunk_refiner: RefinerSettings = field(default_factory=RefinerSettings)
     metadata_enricher: RefinerSettings = field(default_factory=RefinerSettings)
 
@@ -166,6 +168,8 @@ def load_settings(config_path: str | None = None) -> Settings:
             splitter=ingestion_raw.get("splitter", "recursive"),
             batch_size=ingestion_raw.get("batch_size", 100),
             integrity_db_path=ingestion_raw.get("integrity_db_path", "./data/db/ingestion_history/history.sqlite3"),
+            image_index_db_path=ingestion_raw.get("image_index_db_path", "./data/db/image_index/images.sqlite3"),
+            images_root_dir=ingestion_raw.get("images_root_dir", "./data/images"),
             chunk_refiner=RefinerSettings(**chunk_refiner_raw),
             metadata_enricher=RefinerSettings(**metadata_enricher_raw),
         ),

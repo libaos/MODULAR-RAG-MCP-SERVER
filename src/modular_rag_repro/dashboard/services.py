@@ -182,6 +182,7 @@ class DashboardService:
             "document_id": result.document.id if result.document else None,
             "file_hash": result.file_hash,
             "chunk_count": result.chunk_count,
+            "image_count": result.image_count,
             "vector_count": result.vector_count,
             "upserted_count": result.upserted_count,
             "skipped": result.skipped,

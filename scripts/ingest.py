@@ -85,6 +85,7 @@ def print_summary(results: List[PipelineResult]) -> None:
     skipped_count = sum(1 for item in results if item.skipped)
     failed_count = sum(1 for item in results if not item.success)
     chunk_total = sum(item.chunk_count for item in results if item.success and not item.skipped)
+    image_total = sum(item.image_count for item in results if item.success and not item.skipped)
     vector_total = sum(item.vector_count for item in results if item.success and not item.skipped)
     upsert_total = sum(item.upserted_count for item in results if item.success and not item.skipped)
 
@@ -96,6 +97,7 @@ def print_summary(results: List[PipelineResult]) -> None:
     print(f"skipped={skipped_count}")
     print(f"failed={failed_count}")
     print(f"total_chunks={chunk_total}")
+    print(f"total_images={image_total}")
     print(f"total_vectors={vector_total}")
     print(f"total_upserted={upsert_total}")
     print("=" * 60)
@@ -167,6 +169,7 @@ def main() -> int:
         trace.metadata["skip_reason"] = result.skip_reason
         trace.metadata["document_id"] = result.document.id if result.document else None
         trace.metadata["chunk_count"] = result.chunk_count
+        trace.metadata["image_count"] = result.image_count
         trace.metadata["vector_count"] = result.vector_count
         trace.metadata["upserted_count"] = result.upserted_count
         if result.error:
@@ -182,6 +185,7 @@ def main() -> int:
             print(f"  [OK] doc_id={doc_id}")
             print(f"  [OK] file_hash={result.file_hash}")
             print(f"  [OK] chunk_count={result.chunk_count}")
+            print(f"  [OK] image_count={result.image_count}")
             print(f"  [OK] vector_count={result.vector_count}")
             print(f"  [OK] upserted_count={result.upserted_count}")
         else:

@@ -6,18 +6,19 @@
 - `DocumentChunker`
 - `ChunkRefiner`
 - `MetadataEnricher`
+- `ImageStorage`
 - `EmbeddingEncoder`
 - `BM25Indexer`
 - `ChromaUpserter`
 
 也就是说，当前最小闭环已经是：
 
-- `PDF -> Document -> Chunks -> ChunkRefiner -> MetadataEnricher -> Embeddings -> BM25 -> Chroma`
+- `PDF -> Document -> ImageStorage -> Chunks -> ChunkRefiner -> MetadataEnricher -> Embeddings -> BM25 -> Chroma`
 
 还没有接入的能力依然包括：
 
-- 图片落盘
-- 元数据增强
+- 图片 caption
+- LLM 增强版元数据
 - 多阶段 Trace 持久化
 """
 
@@ -33,6 +34,7 @@ from modular_rag_repro.ingestion.chunk_refiner import ChunkRefiner
 from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
 from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
 from modular_rag_repro.ingestion.file_integrity import SQLiteIntegrityChecker
+from modular_rag_repro.ingestion.image_storage import ImageStorage
 from modular_rag_repro.ingestion.metadata_enricher import MetadataEnricher
 from modular_rag_repro.ingestion.pdf_loader import PdfLoader
 from modular_rag_repro.settings import Settings
@@ -48,6 +50,7 @@ class PipelineResult:
     - 是否成功
     - 原始文档对象
     - 切分后的 chunk 列表
+    - 图片数量
     - 生成的向量数量
     - 写入 Chroma 的数量
     - 统计信息
@@ -59,6 +62,7 @@ class PipelineResult:
     file_hash: Optional[str] = None
     document: Optional[Document] = None
     chunks: List[Chunk] = field(default_factory=list)
+    image_count: int = 0
     vector_count: int = 0
     upserted_count: int = 0
     skipped: bool = False
@@ -83,6 +87,7 @@ class IngestionPipeline:
         chunker: Optional[DocumentChunker] = None,
         chunk_refiner: Optional[ChunkRefiner] = None,
         metadata_enricher: Optional[MetadataEnricher] = None,
+        image_storage: Optional[ImageStorage] = None,
         embedding_encoder: Optional[EmbeddingEncoder] = None,
         bm25_indexer: Optional[BM25Indexer] = None,
         chroma_upserter: Optional[ChromaUpserter] = None,
@@ -94,6 +99,10 @@ class IngestionPipeline:
         self.chunker = chunker or DocumentChunker(settings)
         self.chunk_refiner = chunk_refiner or ChunkRefiner(settings)
         self.metadata_enricher = metadata_enricher or MetadataEnricher(settings)
+        self.image_storage = image_storage or ImageStorage(
+            db_path=settings.ingestion.image_index_db_path,
+            images_root=settings.ingestion.images_root_dir,
+        )
         self.embedding_encoder = embedding_encoder or EmbeddingEncoder(settings)
         self.bm25_indexer = bm25_indexer or BM25Indexer(index_dir="data/db/bm25")
         self.chroma_upserter = chroma_upserter or ChromaUpserter(settings, collection=collection)
@@ -111,12 +120,13 @@ class IngestionPipeline:
 
         1. 做 SHA256 幂等检查
         2. 读取 PDF
-        3. 切分 chunk
-        4. 规则清洗 chunk
-        5. 增强 chunk 元数据
-        6. 生成 embedding
-        7. 构建 BM25 索引
-        8. 写入 Chroma
+        3. 抽取并存储图片
+        4. 切分 chunk
+        5. 规则清洗 chunk
+        6. 增强 chunk 元数据
+        7. 生成 embedding
+        8. 构建 BM25 索引
+        9. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
         file_hash: str | None = None
@@ -156,6 +166,23 @@ class IngestionPipeline:
 
             if trace is not None:
                 trace.record_stage("load", stages["load"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
+
+            stage_t0 = perf_counter()
+            stored_images = self.image_storage.store_pdf_images(
+                file_path=file_path,
+                images=list(document.metadata.get("images", [])),
+                collection=self.collection,
+                doc_hash=str(document.metadata.get("doc_hash", "")),
+            )
+            document.metadata["images"] = stored_images
+            stages["images"] = {
+                "image_count": len(stored_images),
+                "indexed_count": self.image_storage.count_images(self.collection),
+                "first_image_path": stored_images[0]["file_path"] if stored_images else None,
+            }
+
+            if trace is not None:
+                trace.record_stage("images", stages["images"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
             stage_t0 = perf_counter()
             chunks = self.chunker.split_document(document)
@@ -233,6 +260,7 @@ class IngestionPipeline:
                 file_hash=file_hash,
                 document=document,
                 chunks=chunks,
+                image_count=len(stored_images),
                 vector_count=len(vectors),
                 upserted_count=upserted_count,
                 stages=stages,

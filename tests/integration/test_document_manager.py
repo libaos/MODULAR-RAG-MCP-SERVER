@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter
 from modular_rag_repro.management import DocumentManager
-from helpers import SAMPLE_PDF, cleanup_collection, seed_collection
+from helpers import SAMPLE_PDF, WITH_IMAGES_PDF, cleanup_collection, seed_collection
 
 
 def test_document_manager_delete_document_cleans_bm25_and_chroma(test_settings, unique_collection: str) -> None:
@@ -30,5 +30,29 @@ def test_document_manager_delete_document_cleans_bm25_and_chroma(test_settings, 
 
         chroma = ChromaUpserter(test_settings, collection=unique_collection)
         assert chroma.get_collection_count(unique_collection) == 0
+    finally:
+        cleanup_collection(test_settings, unique_collection)
+
+
+def test_document_manager_delete_document_cleans_images(test_settings, unique_collection: str) -> None:
+    """删除带图文档时，图片文件和索引也应清掉。"""
+    from modular_rag_repro.ingestion import ImageStorage
+
+    cleanup_collection(test_settings, unique_collection)
+    seeded = seed_collection(test_settings, unique_collection, WITH_IMAGES_PDF)
+    manager = DocumentManager(test_settings)
+    image_storage = ImageStorage(
+        db_path=test_settings.ingestion.image_index_db_path,
+        images_root=test_settings.ingestion.images_root_dir,
+    )
+
+    try:
+        assert image_storage.count_images(unique_collection) >= 1
+
+        summary = manager.get_document_summary(seeded.document.id, collection=unique_collection)
+        manager.delete_document(seeded.document.id, collection=unique_collection)
+
+        assert image_storage.count_images(unique_collection) == 0
+        assert summary.metadata["doc_hash"]
     finally:
         cleanup_collection(test_settings, unique_collection)
