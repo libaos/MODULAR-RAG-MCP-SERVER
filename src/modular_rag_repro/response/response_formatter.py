@@ -1,26 +1,21 @@
-"""查询响应格式化器。
-
-当前阶段不做生成式回答，只做稳定、可读的结构化格式化：
-
-- 输出摘要
-- 输出命中条目
-- 输出来源路径和 chunk 序号
-
-这样后面无论接 MCP、Dashboard 还是评估，都能复用同一份最终结果结构。
-"""
+"""查询响应格式化器。"""
 
 from __future__ import annotations
 
 from typing import List
 
+from modular_rag_repro.response.multimodal_assembler import MultimodalAssembler
+from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import QueryResponse, QueryResponseItem, RetrievalResult
 
 
 class ResponseFormatter:
     """最小可用的查询响应格式化器。"""
 
-    def __init__(self, preview_limit: int = 180) -> None:
+    def __init__(self, settings: Settings, preview_limit: int = 180) -> None:
+        self.settings = settings
         self.preview_limit = preview_limit
+        self.multimodal = MultimodalAssembler(settings)
 
     def format(
         self,
@@ -31,6 +26,7 @@ class ResponseFormatter:
         """把检索结果格式化为稳定结构。"""
         items: List[QueryResponseItem] = []
         for rank, result in enumerate(results, start=1):
+            images = self.multimodal.extract_images(result)
             items.append(
                 QueryResponseItem(
                     rank=rank,
@@ -39,6 +35,8 @@ class ResponseFormatter:
                     source_path=str(result.metadata.get("source_path", "(unknown)")),
                     chunk_index=result.metadata.get("chunk_index", "(unknown)"),
                     preview=self._build_preview(result.text),
+                    image_count=len(images),
+                    images=images,
                 )
             )
 
@@ -48,6 +46,7 @@ class ResponseFormatter:
             "collection": collection,
             "result_count": len(items),
             "top_chunk_id": items[0].chunk_id if items else None,
+            "total_image_count": sum(item.image_count for item in items),
         }
         return QueryResponse(
             query=query,
@@ -75,6 +74,11 @@ class ResponseFormatter:
             lines.append(f"[{item.rank}] score={item.score:.4f} id={item.chunk_id}")
             lines.append(f"    source={item.source_path}")
             lines.append(f"    chunk_index={item.chunk_index}")
+            lines.append(f"    image_count={item.image_count}")
+            if item.images:
+                caption = item.images[0].get("caption")
+                if caption:
+                    lines.append(f"    first_image_caption={caption}")
             lines.append(f"    preview={item.preview}")
 
         lines.append("=" * 60)
@@ -88,7 +92,8 @@ class ResponseFormatter:
         top_item = items[0]
         return (
             f"在集合 {collection} 中找到 {len(items)} 条结果，"
-            f"首条命中来自 {top_item.source_path} 的 chunk {top_item.chunk_index}。"
+            f"首条命中来自 {top_item.source_path} 的 chunk {top_item.chunk_index}"
+            f"（关联图片 {top_item.image_count} 张）。"
         )
 
     def _build_preview(self, text: str) -> str:

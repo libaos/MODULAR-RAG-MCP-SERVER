@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from modular_rag_repro.settings import load_settings
-from helpers import SAMPLE_PDF, REPRO_ROOT, cleanup_collection, seed_collection, unique_collection_name
+from helpers import SAMPLE_PDF, WITH_IMAGES_PDF, REPRO_ROOT, cleanup_collection, seed_collection, unique_collection_name
 
 
 INIT_REQUEST = {
@@ -158,6 +158,42 @@ def test_mcp_server_smoke() -> None:
         summary_text = " ".join(block.get("text", "") for block in summary_resp["result"]["content"])
         assert seeded.document.id in summary_text
         assert "Sample Document" in summary_text
+    finally:
+        _terminate(proc)
+        cleanup_collection(settings, collection)
+
+
+def test_mcp_server_returns_image_blocks_for_multimodal_result() -> None:
+    """查询带图文档时，MCP tool 应返回 image content block。"""
+    settings = load_settings()
+    collection = unique_collection_name("mcp-image")
+    cleanup_collection(settings, collection)
+    seed_collection(settings, collection, WITH_IMAGES_PDF)
+    proc = _start_server()
+
+    try:
+        responses = _send_jsonrpc(
+            proc,
+            [
+                INIT_REQUEST,
+                INITIALIZED_NOTIFICATION,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "query_knowledge_hub",
+                        "arguments": {"query": "image", "top_k": 3, "collection": collection},
+                    },
+                },
+            ],
+            expected_responses=2,
+            timeout=60.0,
+        )
+
+        query_resp = _find(responses, 2)
+        assert query_resp is not None
+        assert any(block.get("type") == "image" for block in query_resp["result"]["content"])
     finally:
         _terminate(proc)
         cleanup_collection(settings, collection)

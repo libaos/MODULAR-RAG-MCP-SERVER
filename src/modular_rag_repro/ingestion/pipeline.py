@@ -5,6 +5,7 @@
 - `PdfLoader`
 - `DocumentChunker`
 - `ChunkRefiner`
+- `ImageCaptioner`
 - `MetadataEnricher`
 - `ImageStorage`
 - `EmbeddingEncoder`
@@ -13,11 +14,11 @@
 
 也就是说，当前最小闭环已经是：
 
-- `PDF -> Document -> ImageStorage -> Chunks -> ChunkRefiner -> MetadataEnricher -> Embeddings -> BM25 -> Chroma`
+- `PDF -> Document -> ImageStorage -> Chunks -> ChunkRefiner -> ImageCaptioner -> MetadataEnricher -> Embeddings -> BM25 -> Chroma`
 
 还没有接入的能力依然包括：
 
-- 图片 caption
+- 视觉 LLM caption
 - LLM 增强版元数据
 - 多阶段 Trace 持久化
 """
@@ -34,6 +35,7 @@ from modular_rag_repro.ingestion.chunk_refiner import ChunkRefiner
 from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
 from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
 from modular_rag_repro.ingestion.file_integrity import SQLiteIntegrityChecker
+from modular_rag_repro.ingestion.image_captioner import ImageCaptioner
 from modular_rag_repro.ingestion.image_storage import ImageStorage
 from modular_rag_repro.ingestion.metadata_enricher import MetadataEnricher
 from modular_rag_repro.ingestion.pdf_loader import PdfLoader
@@ -86,6 +88,7 @@ class IngestionPipeline:
         loader: Optional[PdfLoader] = None,
         chunker: Optional[DocumentChunker] = None,
         chunk_refiner: Optional[ChunkRefiner] = None,
+        image_captioner: Optional[ImageCaptioner] = None,
         metadata_enricher: Optional[MetadataEnricher] = None,
         image_storage: Optional[ImageStorage] = None,
         embedding_encoder: Optional[EmbeddingEncoder] = None,
@@ -98,6 +101,7 @@ class IngestionPipeline:
         self.loader = loader or PdfLoader(extract_images=True)
         self.chunker = chunker or DocumentChunker(settings)
         self.chunk_refiner = chunk_refiner or ChunkRefiner(settings)
+        self.image_captioner = image_captioner or ImageCaptioner(settings)
         self.metadata_enricher = metadata_enricher or MetadataEnricher(settings)
         self.image_storage = image_storage or ImageStorage(
             db_path=settings.ingestion.image_index_db_path,
@@ -123,10 +127,11 @@ class IngestionPipeline:
         3. 抽取并存储图片
         4. 切分 chunk
         5. 规则清洗 chunk
-        6. 增强 chunk 元数据
-        7. 生成 embedding
-        8. 构建 BM25 索引
-        9. 写入 Chroma
+        6. 生成图片 caption
+        7. 增强 chunk 元数据
+        8. 生成 embedding
+        9. 构建 BM25 索引
+        10. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
         file_hash: str | None = None
@@ -206,6 +211,18 @@ class IngestionPipeline:
 
             if trace is not None:
                 trace.record_stage("refine", stages["refine"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
+
+            stage_t0 = perf_counter()
+            chunks = self.image_captioner.caption_chunks(chunks)
+            stages["caption"] = {
+                "chunk_count": len(chunks),
+                "captioned_chunk_count": sum(1 for chunk in chunks if chunk.metadata.get("captioned_image_count")),
+                "captioned_images": sum(int(chunk.metadata.get("captioned_image_count", 0)) for chunk in chunks),
+                "vision_enabled": self.image_captioner.vision_enabled,
+            }
+
+            if trace is not None:
+                trace.record_stage("caption", stages["caption"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
             stage_t0 = perf_counter()
             chunks = self.metadata_enricher.enrich_chunks(chunks)

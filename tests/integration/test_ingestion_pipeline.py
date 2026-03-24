@@ -100,7 +100,10 @@ def test_ingestion_pipeline_stores_images_for_pdf_with_images(test_settings, uni
         assert result.success is True
         assert result.image_count >= 1
         assert result.stages["images"]["image_count"] >= 1
+        assert result.stages["caption"]["captioned_images"] >= 1
         assert result.document is not None
         assert result.document.metadata["images"][0]["file_path"]
+        assert "Image description:" in result.chunks[0].text
+        assert result.chunks[0].metadata["captioned_image_count"] >= 1
     finally:
         cleanup_collection(test_settings, unique_collection)

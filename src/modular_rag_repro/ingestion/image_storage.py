@@ -111,6 +111,15 @@ class ImageStorage:
         finally:
             conn.close()
 
+    def get_image_path(self, image_id: str) -> Optional[str]:
+        """按 image_id 查询本地路径。"""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            row = conn.execute("SELECT file_path FROM image_index WHERE image_id = ?", (image_id,)).fetchone()
+            return str(row[0]) if row else None
+        finally:
+            conn.close()
+
     def delete_document_images(self, doc_hash: str, collection: Optional[str] = None) -> int:
         """删除某个文档关联的图片文件和索引记录。"""
         records = self.list_images(collection=collection, doc_hash=doc_hash)

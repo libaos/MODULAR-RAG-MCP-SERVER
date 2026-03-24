@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from modular_rag_repro.query_engine import QueryWorkflow
-from helpers import SAMPLE_PDF, cleanup_collection, seed_collection, update_test_config
+from helpers import SAMPLE_PDF, WITH_IMAGES_PDF, cleanup_collection, seed_collection, update_test_config
 
 
 def test_query_workflow_returns_dense_sparse_and_fusion_results(test_settings, unique_collection: str) -> None:
@@ -63,3 +63,26 @@ def test_query_workflow_applies_simple_rerank(temp_config_path: Path, unique_col
         assert "rerank_score" in result.final_results[0].metadata
     finally:
         cleanup_collection(settings, unique_collection)
+
+
+def test_query_workflow_returns_multimodal_metadata_for_image_docs(test_settings, unique_collection: str) -> None:
+    """带图文档命中后，格式化结果应携带图片信息。"""
+    cleanup_collection(test_settings, unique_collection)
+    seed_collection(test_settings, unique_collection, WITH_IMAGES_PDF)
+    workflow = QueryWorkflow(test_settings)
+
+    try:
+        result = workflow.run(
+            query="image",
+            collection=unique_collection,
+            top_k=3,
+            no_rerank=True,
+            source="integration-test",
+        )
+
+        assert result.formatted_response.result_count >= 1
+        assert result.formatted_response.items[0].image_count >= 1
+        assert result.formatted_response.items[0].images[0]["file_path"]
+        assert result.formatted_response.metadata["total_image_count"] >= 1
+    finally:
+        cleanup_collection(test_settings, unique_collection)

@@ -127,6 +127,8 @@ class QueryResponseItem:
     source_path: str
     chunk_index: Any
     preview: str
+    image_count: int = 0
+    images: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

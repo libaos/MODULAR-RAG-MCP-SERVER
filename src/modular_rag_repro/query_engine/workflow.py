@@ -47,7 +47,7 @@ class QueryWorkflow:
             provider=settings.rerank.provider,
             top_k=settings.rerank.top_k,
         )
-        self.formatter = ResponseFormatter()
+        self.formatter = ResponseFormatter(settings)
         self.trace_collector = TraceCollector(settings.observability.trace_file)
 
     def run(

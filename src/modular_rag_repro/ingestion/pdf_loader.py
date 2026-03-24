@@ -1,18 +1,4 @@
-"""PDF 读取器。
-
-当前阶段只解决一件事：
-
-- 把 PDF 文件读成一个 `Document`
-
-实现策略尽量简单直接：
-
-- 使用 `PyMuPDF(fitz)` 提取文本
-- 可选提取图片元数据
-- 生成稳定的 `doc_id` 和 `doc_hash`
-
-后面如果要追求和参考实现更接近，再补 Markdown 转换、图片占位符、
-更复杂的元数据抽取都可以。
-"""
+"""PDF 读取器。"""
 
 from __future__ import annotations
 
@@ -55,7 +41,14 @@ class PdfLoader:
 
         pdf = fitz.open(path)
         try:
-            page_texts = [self._extract_page_text(page) for page in pdf]
+            page_texts: List[str] = []
+            images: List[Dict[str, Any]] = []
+
+            for page_index, page in enumerate(pdf, start=1):
+                page_images = self._extract_page_image_metadata(page, doc_hash, page_index) if self.extract_images else []
+                images.extend(page_images)
+                page_texts.append(self._build_page_text(page, page_images))
+
             text = "\n\n".join(part for part in page_texts if part.strip()).strip()
 
             metadata: Dict[str, Any] = {
@@ -67,7 +60,7 @@ class PdfLoader:
             }
 
             if self.extract_images:
-                metadata["images"] = self._extract_image_metadata(pdf, doc_hash)
+                metadata["images"] = images
 
             return Document(
                 id=doc_id,
@@ -87,40 +80,34 @@ class PdfLoader:
         if path.suffix.lower() != ".pdf":
             raise ValueError(f"文件不是 PDF: {path}")
 
-    def _extract_page_text(self, page: fitz.Page) -> str:
-        """提取单页文本。
+    def _build_page_text(self, page: fitz.Page, page_images: List[Dict[str, Any]]) -> str:
+        """构造单页文本，并把图片占位符嵌进正文。"""
+        page_text = page.get_text().strip()
+        placeholders = [f"[IMAGE: {item['id']}]" for item in page_images]
+        if not placeholders:
+            return page_text
+        if not page_text:
+            return "\n".join(placeholders)
+        return f"{page_text}\n\n" + "\n".join(placeholders)
 
-        当前阶段直接用 `get_text()`，先保证能读出来。
-        """
-        return page.get_text().strip()
-
-    def _extract_image_metadata(self, pdf: fitz.Document, doc_hash: str) -> List[Dict[str, Any]]:
-        """提取图片元数据。
-
-        当前先不真正落盘图片文件，只记录：
-
-        - image_id
-        - page
-        - 图片序号
-        - 预期存储目录
-        """
+    def _extract_page_image_metadata(self, page: fitz.Page, doc_hash: str, page_num: int) -> List[Dict[str, Any]]:
+        """提取单页图片元数据。"""
         images: List[Dict[str, Any]] = []
         image_dir = self.image_storage_dir / doc_hash
-
-        for page_index, page in enumerate(pdf):
-            image_list = page.get_images(full=True)
-            for image_index, image_info in enumerate(image_list, start=1):
-                xref = image_info[0]
-                images.append(
-                    {
-                        "id": self._build_image_id(doc_hash, page_index + 1, image_index),
-                        "xref": xref,
-                        "page": page_index + 1,
-                        "index": image_index,
-                        "storage_dir": str(image_dir),
-                    }
-                )
-
+        image_list = page.get_images(full=True)
+        for image_index, image_info in enumerate(image_list, start=1):
+            xref = image_info[0]
+            image_id = self._build_image_id(doc_hash, page_num, image_index)
+            images.append(
+                {
+                    "id": image_id,
+                    "xref": xref,
+                    "page": page_num,
+                    "index": image_index,
+                    "storage_dir": str(image_dir),
+                    "placeholder": f"[IMAGE: {image_id}]",
+                }
+            )
         return images
 
     def _extract_title(self, page_texts: List[str]) -> str:

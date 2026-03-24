@@ -28,6 +28,7 @@
 - ChunkRefiner（规则版）
 - MetadataEnricher（规则版）
 - 图片落盘与本地索引
+- ImageCaptioner（规则版）
 - Ollama Embedding
 - BM25 稀疏索引
 - Chroma 向量入库
@@ -37,6 +38,7 @@
 - 本地 Simple Rerank
 - CLI 查询
 - MCP Server
+- MCP 多模态图片返回
 - Dashboard 六页
 - ingest/query trace
 - Golden Set 评估
@@ -218,7 +220,7 @@ ollama list
 
 当前最近一次全量结果：
 
-- `44 passed`
+- `48 passed`
 
 ---
 
@@ -243,9 +245,9 @@ ollama list
 - 当前只实现了本地 `simple rerank`，还没有 cross-encoder / LLM rerank
 - `ChunkRefiner` 当前只实现了规则版清洗，还没有 LLM 增强版
 - `MetadataEnricher` 当前只实现了规则版增强，还没有 LLM 增强版
-- 已经做了图片落盘和本地索引，但还没有 `image_captioner`
+- `ImageCaptioner` 当前只实现了规则版描述，还没有视觉 LLM 增强版
 - 还没有接生成式回答
-- 还没有做多模态返回
+- Dashboard 还没有把图片做成更完整的可视化浏览
 - 还没有拆成自己独立的 `.venv`
 
 也就是说，这份复现版更偏“最小可用的工程闭环”，不是完整生产版。

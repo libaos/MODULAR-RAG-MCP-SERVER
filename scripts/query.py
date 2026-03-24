@@ -12,7 +12,6 @@
 
 还没有接入：
 
-- rerank
 - 生成式回答
 """
 
@@ -131,11 +130,13 @@ def print_result_section(title: str, results: Iterable[RetrievalResult], top_k: 
     for index, item in enumerate(results, start=1):
         source_path = item.metadata.get("source_path", "(unknown)")
         chunk_index = item.metadata.get("chunk_index", "(unknown)")
+        image_count = len(item.metadata.get("images", [])) if isinstance(item.metadata.get("images"), list) else 0
         preview = build_preview(item.text)
 
         print(f"#{index:02d}  score={item.score:.4f}  id={item.chunk_id}")
         print(f"     source_path={source_path}")
         print(f"     chunk_index={chunk_index}")
+        print(f"     image_count={image_count}")
         print(f"     text={preview}")
 
     print("=" * 60)

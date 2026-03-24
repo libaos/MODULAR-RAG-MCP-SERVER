@@ -107,6 +107,7 @@ class KnowledgeCatalog:
                     "doc_type": first_metadata.get("doc_type"),
                     "page_count": first_metadata.get("page_count"),
                     "doc_hash": first_metadata.get("doc_hash"),
+                    "image_count": first_metadata.get("image_count"),
                 }
                 return DocumentSummary(
                     doc_id=str(first_metadata.get("source_ref", doc_id)),
@@ -154,6 +155,7 @@ class KnowledgeCatalog:
                 "doc_type": first_metadata.get("doc_type"),
                 "page_count": first_metadata.get("page_count"),
                 "doc_hash": first_metadata.get("doc_hash"),
+                "image_count": first_metadata.get("image_count"),
             }
             summaries.append(
                 DocumentSummary(
@@ -222,6 +224,8 @@ class KnowledgeCatalog:
         doc_type = metadata.get("doc_type")
         if doc_type:
             tags.append(str(doc_type))
+        if metadata.get("has_images"):
+            tags.append("has_images")
         return tags
 
     def _build_summary(self, chunks: List[Dict[str, Any]], max_length: int = 240) -> str:

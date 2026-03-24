@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
 import chromadb
@@ -79,7 +80,7 @@ class DenseRetriever:
 
         results: List[RetrievalResult] = []
         for chunk_id, text, metadata, distance in zip(ids, documents, metadatas, distances):
-            metadata = metadata or {}
+            metadata = self._restore_metadata(metadata or {})
             score = self._distance_to_score(distance)
             results.append(
                 RetrievalResult(
@@ -90,6 +91,24 @@ class DenseRetriever:
                 )
             )
         return results
+
+    def _restore_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """把 Chroma 里被 JSON 化的复杂 metadata 尽量还原。"""
+        restored: Dict[str, Any] = {}
+        for key, value in metadata.items():
+            if not isinstance(value, str):
+                restored[key] = value
+                continue
+
+            text = value.strip()
+            if text and text[0] in "[{":
+                try:
+                    restored[key] = json.loads(value)
+                    continue
+                except json.JSONDecodeError:
+                    pass
+            restored[key] = value
+        return restored
 
     def _distance_to_score(self, distance: float) -> float:
         """把 Chroma 返回的距离转成更直观的分数。"""
