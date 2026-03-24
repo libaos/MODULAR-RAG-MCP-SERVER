@@ -32,6 +32,8 @@ sys.path.insert(0, str(SRC_ROOT))
 from modular_rag_repro.logging_utils import configure_logging
 from modular_rag_repro.ingestion import IngestionPipeline, PipelineResult
 from modular_rag_repro.settings import load_settings
+from modular_rag_repro.trace import TraceCollector
+from modular_rag_repro.types import TraceContext
 
 
 def parse_args() -> argparse.Namespace:
@@ -145,13 +147,32 @@ def main() -> int:
         print("[INFO] 当前阶段尚未接入 SHA256 去重，force 参数暂时只保留接口含义")
 
     pipeline = IngestionPipeline(settings, collection=args.collection)
+    trace_collector = TraceCollector(settings.observability.trace_file)
     results: List[PipelineResult] = []
 
     print("\n[INFO] 开始执行摄取...\n")
     for index, file_path in enumerate(files, start=1):
         print(f"[{index}/{len(files)}] {file_path}")
-        result = pipeline.run(str(file_path))
+        trace = TraceContext(
+            trace_type="ingestion",
+            metadata={
+                "source": "cli",
+                "collection": args.collection,
+                "file_path": str(file_path),
+            },
+        )
+        result = pipeline.run(str(file_path), trace=trace)
         results.append(result)
+
+        trace.metadata["success"] = result.success
+        trace.metadata["document_id"] = result.document.id if result.document else None
+        trace.metadata["chunk_count"] = result.chunk_count
+        trace.metadata["vector_count"] = result.vector_count
+        trace.metadata["upserted_count"] = result.upserted_count
+        if result.error:
+            trace.metadata["error"] = result.error
+        if settings.observability.trace_enabled:
+            trace_collector.collect(trace)
 
         if result.success:
             doc_id = result.document.id if result.document else "(none)"

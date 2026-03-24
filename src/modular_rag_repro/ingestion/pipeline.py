@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Any, Dict, List, Optional
 
 from modular_rag_repro.ingestion.bm25_indexer import BM25Indexer
@@ -99,6 +100,7 @@ class IngestionPipeline:
         stages: Dict[str, Any] = {}
 
         try:
+            stage_t0 = perf_counter()
             document = self.loader.load(file_path)
             stages["load"] = {
                 "doc_id": document.id,
@@ -108,8 +110,9 @@ class IngestionPipeline:
             }
 
             if trace is not None:
-                trace.record_stage("load", stages["load"])
+                trace.record_stage("load", stages["load"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
+            stage_t0 = perf_counter()
             chunks = self.chunker.split_document(document)
             stages["chunk"] = {
                 "chunk_count": len(chunks),
@@ -117,8 +120,9 @@ class IngestionPipeline:
             }
 
             if trace is not None:
-                trace.record_stage("chunk", stages["chunk"])
+                trace.record_stage("chunk", stages["chunk"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
+            stage_t0 = perf_counter()
             vectors = self.embedding_encoder.encode_chunks(chunks)
             stages["embed"] = {
                 "vector_count": len(vectors),
@@ -126,8 +130,9 @@ class IngestionPipeline:
             }
 
             if trace is not None:
-                trace.record_stage("embed", stages["embed"])
+                trace.record_stage("embed", stages["embed"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
+            stage_t0 = perf_counter()
             self.bm25_indexer.build(chunks, collection=self.collection)
             stages["bm25"] = {
                 "indexed_chunks": len(chunks),
@@ -135,8 +140,9 @@ class IngestionPipeline:
             }
 
             if trace is not None:
-                trace.record_stage("bm25", stages["bm25"])
+                trace.record_stage("bm25", stages["bm25"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
+            stage_t0 = perf_counter()
             upserted_count = self.chroma_upserter.upsert_chunks(chunks, vectors, collection=self.collection)
             stages["chroma"] = {
                 "upserted_count": upserted_count,
@@ -145,7 +151,7 @@ class IngestionPipeline:
             }
 
             if trace is not None:
-                trace.record_stage("chroma", stages["chroma"])
+                trace.record_stage("chroma", stages["chroma"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
             return PipelineResult(
                 success=True,

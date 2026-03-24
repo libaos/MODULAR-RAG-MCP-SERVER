@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 
 @dataclass(slots=True)
@@ -55,6 +57,8 @@ class TraceStage:
 class TraceContext:
     """一次摄取或查询的 Trace 容器。"""
     trace_type: str
+    trace_id: str = field(default_factory=lambda: f"trace_{uuid4().hex[:12]}")
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: Dict[str, Any] = field(default_factory=dict)
     stages: List[TraceStage] = field(default_factory=list)
 
@@ -76,7 +80,9 @@ class TraceContext:
     def to_dict(self) -> Dict[str, Any]:
         """转换为可序列化字典。"""
         return {
+            "trace_id": self.trace_id,
             "trace_type": self.trace_type,
+            "created_at": self.created_at,
             "metadata": self.metadata,
             "stages": [asdict(stage) for stage in self.stages],
         }

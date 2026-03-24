@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 from modular_rag_repro.ingestion import IngestionPipeline, PipelineResult
 from modular_rag_repro.mcp_server.catalog import KnowledgeCatalog
 from modular_rag_repro.settings import Settings, load_settings, resolve_path
+from modular_rag_repro.trace import TraceCollector
+from modular_rag_repro.types import TraceContext
 
 
 class DashboardService:
@@ -95,7 +97,25 @@ class DashboardService:
 
         try:
             pipeline = IngestionPipeline(self.settings, collection=collection)
-            result = pipeline.run(str(temp_path))
+            trace = TraceContext(
+                trace_type="ingestion",
+                metadata={
+                    "source": "dashboard",
+                    "collection": collection,
+                    "file_path": str(temp_path),
+                    "uploaded_file_name": file_name,
+                },
+            )
+            result = pipeline.run(str(temp_path), trace=trace)
+            trace.metadata["success"] = result.success
+            trace.metadata["document_id"] = result.document.id if result.document else None
+            trace.metadata["chunk_count"] = result.chunk_count
+            trace.metadata["vector_count"] = result.vector_count
+            trace.metadata["upserted_count"] = result.upserted_count
+            if result.error:
+                trace.metadata["error"] = result.error
+            if self.settings.observability.trace_enabled:
+                TraceCollector(self.settings.observability.trace_file).collect(trace)
             return self._pipeline_result_to_dict(result)
         finally:
             try:

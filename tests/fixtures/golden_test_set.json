@@ -1,0 +1,26 @@
+{
+  "description": "Golden test set for repro project. Targets the stable chunk generated from simple.pdf.",
+  "version": "1.0",
+  "test_cases": [
+    {
+      "query": "sample pdf",
+      "expected_chunk_ids": [
+        "doc_2ecc825a70c097df_0000_46b08cc2"
+      ],
+      "expected_sources": [
+        "D:\\OneDrive - stu.scau.edu.cn\\桌面\\workspace\\MODULAR-RAG-MCP-SERVER\\tests\\fixtures\\sample_documents\\simple.pdf"
+      ],
+      "reference_answer": "The sample document is a simple PDF used for PDF loader and conversion testing."
+    },
+    {
+      "query": "这个文档讲了什么？",
+      "expected_chunk_ids": [
+        "doc_2ecc825a70c097df_0000_46b08cc2"
+      ],
+      "expected_sources": [
+        "D:\\OneDrive - stu.scau.edu.cn\\桌面\\workspace\\MODULAR-RAG-MCP-SERVER\\tests\\fixtures\\sample_documents\\simple.pdf"
+      ],
+      "reference_answer": "这个 PDF 是一个用于测试 PDF loader 和文本转换链路的示例文档。"
+    }
+  ]
+}

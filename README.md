@@ -38,13 +38,17 @@
 
 - `Overview / Data Browser / Ingestion Manager / Ingestion Traces / Query Traces / Evaluation Panel`
 
+当前也已经进入 `Phase 6` 的最小可观测性与评估闭环：
+
+- `ingest/query -> logs/traces.jsonl`
+- `evaluate.py -> data/evaluation/*.json`
+
 还没有完成的重点：
 
 - SHA256 去重
-- Query 主链路
-- MCP tools
-- Dashboard 六页
-- Trace 与评估
+- 文档生命周期管理
+- 更完整的评估指标
+- 自动化测试与收口文档
 
 ## 从这里开始
 

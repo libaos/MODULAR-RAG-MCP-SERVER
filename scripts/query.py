@@ -31,8 +31,7 @@ SRC_ROOT = REPRO_ROOT / "src"
 sys.path.insert(0, str(SRC_ROOT))
 
 from modular_rag_repro.logging_utils import configure_logging
-from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, RRFFusion, SparseRetriever
-from modular_rag_repro.response import ResponseFormatter
+from modular_rag_repro.query_engine import QueryWorkflow
 from modular_rag_repro.settings import load_settings
 from modular_rag_repro.types import RetrievalResult
 
@@ -71,27 +70,15 @@ def main() -> int:
 
     configure_logging("DEBUG" if args.verbose else settings.observability.log_level)
 
-    processor = QueryProcessor()
-    dense_retriever = DenseRetriever(settings)
-    sparse_retriever = SparseRetriever(settings)
-    fusion = RRFFusion(k=settings.retrieval.rrf_k)
-    formatter = ResponseFormatter()
+    workflow = QueryWorkflow(settings)
 
     try:
-        processed_query = processor.process(args.query)
-        dense_results = dense_retriever.retrieve(
-            processed_query=processed_query,
+        workflow_result = workflow.run(
+            query=args.query,
             collection=args.collection,
             top_k=args.top_k,
-        )
-        sparse_results = sparse_retriever.retrieve(
-            processed_query=processed_query,
-            collection=args.collection,
-            top_k=args.top_k,
-        )
-        fusion_results = fusion.fuse(
-            ranking_lists=[dense_results, sparse_results],
-            top_k=args.top_k,
+            no_rerank=args.no_rerank,
+            source="cli",
         )
     except Exception as exc:
         print(f"[FAIL] 查询执行失败: {exc}")
@@ -104,30 +91,25 @@ def main() -> int:
     print(f"top_k={args.top_k}")
 
     if args.verbose:
-        filters_text = processed_query.filters if processed_query.filters else "(none)"
-        print(f"[INFO] ProcessedQuery normalized_text={processed_query.normalized_text}")
-        print(f"[INFO] ProcessedQuery keywords={processed_query.keywords} filters={filters_text}")
+        filters_text = workflow_result.processed_query.filters if workflow_result.processed_query.filters else "(none)"
+        print(f"[INFO] ProcessedQuery normalized_text={workflow_result.processed_query.normalized_text}")
+        print(f"[INFO] ProcessedQuery keywords={workflow_result.processed_query.keywords} filters={filters_text}")
 
-    print_result_section("DENSE RESULTS", dense_results, top_k=args.top_k)
-    print_result_section("SPARSE RESULTS", sparse_results, top_k=args.top_k)
-    print_result_section("FUSION RESULTS", fusion_results, top_k=args.top_k)
+    print_result_section("DENSE RESULTS", workflow_result.dense_results, top_k=args.top_k)
+    print_result_section("SPARSE RESULTS", workflow_result.sparse_results, top_k=args.top_k)
+    print_result_section("FUSION RESULTS", workflow_result.fusion_results, top_k=args.top_k)
 
     if args.no_rerank or not settings.rerank.enabled:
         print("[INFO] Reranking disabled by settings.")
-        final_results = fusion_results
+        final_results = workflow_result.final_results
     else:
         # 当前阶段还没实现 rerank，这里先保留接口和回退逻辑。
         print("[INFO] Reranker not implemented yet, fallback to fusion results.")
-        final_results = fusion_results
+        final_results = workflow_result.final_results
 
     print_result_section("RESULTS", final_results, top_k=args.top_k)
-    formatted_response = formatter.format(
-        query=args.query,
-        collection=args.collection,
-        results=final_results,
-    )
     print()
-    print(formatter.render_text(formatted_response))
+    print(workflow.formatter.render_text(workflow_result.formatted_response))
     return 0
 
 
