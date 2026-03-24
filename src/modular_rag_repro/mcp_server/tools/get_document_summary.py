@@ -48,6 +48,7 @@ async def handler(doc_id: str, collection: Optional[str] = None) -> types.CallTo
             f"collection={summary.collection}",
             f"source_path={summary.source_path}",
             f"chunk_count={summary.chunk_count}",
+            f"image_count={summary.metadata.get('image_count', 0)}",
             f"summary={summary.summary}",
         ]
     )

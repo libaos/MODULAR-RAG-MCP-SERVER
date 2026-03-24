@@ -98,7 +98,15 @@ def render_data_browser(service: DashboardService) -> None:
             doc = next(item for item in documents if item["doc_id"] == selected_doc)
             st.markdown(f"**标题**: {doc['title']}")
             st.markdown(f"**来源**: `{doc['source_path']}`")
+            st.markdown(f"**图片数**: {doc.get('image_count', 0)}")
             st.markdown(f"**摘要**: {doc['summary']}")
+            images = service.get_document_images(doc["doc_id"], doc["collection"])
+            if images:
+                st.markdown("**图片预览**")
+                preview_paths = [item["file_path"] for item in images[:3] if item.get("file_path")]
+                if preview_paths:
+                    st.image(preview_paths, width=220)
+                st.caption(f"共 {len(images)} 张图片")
 
     with st.expander("删除文档", expanded=False):
         doc_labels = [f"{item['title']} ({item['collection']})" for item in documents]

@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modular_rag_repro.ingestion import IngestionPipeline, PipelineResult
+from modular_rag_repro.ingestion import ImageStorage, IngestionPipeline, PipelineResult
 from modular_rag_repro.management import DocumentManager
 from modular_rag_repro.settings import Settings, load_settings, resolve_path
 from modular_rag_repro.trace import TraceCollector
@@ -29,6 +29,10 @@ class DashboardService:
         self.settings = settings or load_settings()
         self.document_manager = DocumentManager(self.settings)
         self.catalog = self.document_manager.catalog
+        self.image_storage = ImageStorage(
+            db_path=self.settings.ingestion.image_index_db_path,
+            images_root=self.settings.ingestion.images_root_dir,
+        )
         self.trace_file = resolve_path(self.settings.observability.trace_file)
         self.evaluation_dir = resolve_path("data/evaluation")
 
@@ -81,12 +85,21 @@ class DashboardService:
                         "title": item.title,
                         "source_path": item.source_path,
                         "chunk_count": item.chunk_count,
+                        "image_count": int(item.metadata.get("image_count", 0) or 0),
                         "summary": item.summary,
                         "tags": item.tags,
                         "metadata": item.metadata,
                     }
                 )
         return documents
+
+    def get_document_images(self, doc_id: str, collection: str) -> List[Dict[str, Any]]:
+        """返回某个文档关联的图片列表。"""
+        summary = self.document_manager.get_document_summary(doc_id=doc_id, collection=collection)
+        doc_hash = summary.metadata.get("doc_hash")
+        if not doc_hash:
+            return []
+        return self.image_storage.list_images(collection=collection, doc_hash=str(doc_hash))
 
     def ingest_uploaded_file(self, file_name: str, file_bytes: bytes, collection: str) -> Dict[str, Any]:
         """保存上传文件并调用摄取链路。"""
@@ -113,6 +126,7 @@ class DashboardService:
             trace.metadata["skip_reason"] = result.skip_reason
             trace.metadata["document_id"] = result.document.id if result.document else None
             trace.metadata["chunk_count"] = result.chunk_count
+            trace.metadata["image_count"] = result.image_count
             trace.metadata["vector_count"] = result.vector_count
             trace.metadata["upserted_count"] = result.upserted_count
             if result.error:
