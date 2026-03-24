@@ -48,6 +48,14 @@ def load_test_settings(config_path: Path | str):
     return load_settings(str(config_path))
 
 
+def update_test_config(config_path: Path, updater) -> Path:
+    """原地更新测试配置。"""
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    updater(payload)
+    config_path.write_text(yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return config_path
+
+
 def cleanup_collection(settings, collection: str) -> None:
     """清理某个 collection 在 Chroma 和 BM25 中的测试数据。"""
     try:

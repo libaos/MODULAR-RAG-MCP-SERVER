@@ -99,13 +99,16 @@ def main() -> int:
     print_result_section("SPARSE RESULTS", workflow_result.sparse_results, top_k=args.top_k)
     print_result_section("FUSION RESULTS", workflow_result.fusion_results, top_k=args.top_k)
 
-    if args.no_rerank or not settings.rerank.enabled:
+    rerank_stage = next((stage for stage in workflow_result.trace.stages if stage.name == "rerank"), None)
+    rerank_mode = rerank_stage.payload.get("mode") if rerank_stage else "unknown"
+    rerank_provider = rerank_stage.payload.get("provider") if rerank_stage else "unknown"
+    if rerank_mode == "disabled":
         print("[INFO] Reranking disabled by settings.")
-        final_results = workflow_result.final_results
+    elif rerank_mode == "applied":
+        print(f"[INFO] Reranking applied by provider={rerank_provider}.")
     else:
-        # 当前阶段还没实现 rerank，这里先保留接口和回退逻辑。
-        print("[INFO] Reranker not implemented yet, fallback to fusion results.")
-        final_results = workflow_result.final_results
+        print(f"[INFO] Reranking fallback mode={rerank_mode}, provider={rerank_provider}.")
+    final_results = workflow_result.final_results
 
     print_result_section("RESULTS", final_results, top_k=args.top_k)
     print()

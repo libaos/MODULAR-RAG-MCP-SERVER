@@ -31,6 +31,7 @@
 - Dense 检索
 - Sparse 检索
 - RRF 融合
+- 本地 Simple Rerank
 - CLI 查询
 - MCP Server
 - Dashboard 六页
@@ -83,6 +84,7 @@ cd "D:\OneDrive - stu.scau.edu.cn\桌面\workspace\MODULAR-RAG-MCP-SERVER\repro"
 - Embedding: `ollama / nomic-embed-text`
 - Vector Store: `chroma`
 - BM25: 本地 JSON 索引
+- Rerank: `simple`（默认关闭，打开 `enabled` 即可生效）
 
 建议先确认 Ollama 可用：
 
@@ -213,7 +215,7 @@ ollama list
 
 当前最近一次全量结果：
 
-- `29 passed`
+- `34 passed`
 
 ---
 
@@ -235,6 +237,7 @@ ollama list
 这份复现版已经可用，但还保留了几个明确边界：
 
 - 还没有做真正的 rerank
+- 当前只实现了本地 `simple rerank`，还没有 cross-encoder / LLM rerank
 - 还没有接生成式回答
 - 还没有做图片落盘和多模态返回
 - 还没有拆成自己独立的 `.venv`

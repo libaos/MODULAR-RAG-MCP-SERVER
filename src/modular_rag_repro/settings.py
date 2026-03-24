@@ -71,8 +71,8 @@ class RetrievalSettings:
 class RerankSettings:
     """Rerank 参数配置。"""
     enabled: bool = False
-    provider: str = "none"
-    model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    provider: str = "simple"
+    model: str = "simple-local-reranker"
     top_k: int = 5
 
 

@@ -3,6 +3,7 @@
 from .dense_retriever import DenseRetriever
 from .fusion import RRFFusion
 from .query_processor import QueryProcessor
+from .reranker import SimpleReranker
 from .sparse_retriever import SparseRetriever
 from .workflow import QueryWorkflow, QueryWorkflowResult
 
@@ -11,6 +12,7 @@ __all__ = [
     "DenseRetriever",
     "SparseRetriever",
     "RRFFusion",
+    "SimpleReranker",
     "QueryWorkflow",
     "QueryWorkflowResult",
 ]

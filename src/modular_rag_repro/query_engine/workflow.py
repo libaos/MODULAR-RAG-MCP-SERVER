@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import List, Optional
 
-from modular_rag_repro.query_engine import DenseRetriever, QueryProcessor, RRFFusion, SparseRetriever
+from modular_rag_repro.query_engine.dense_retriever import DenseRetriever
+from modular_rag_repro.query_engine.fusion import RRFFusion
+from modular_rag_repro.query_engine.query_processor import QueryProcessor
+from modular_rag_repro.query_engine.reranker import SimpleReranker
+from modular_rag_repro.query_engine.sparse_retriever import SparseRetriever
 from modular_rag_repro.response import ResponseFormatter
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.trace import TraceCollector
@@ -39,6 +43,10 @@ class QueryWorkflow:
         self.dense_retriever = DenseRetriever(settings)
         self.sparse_retriever = SparseRetriever(settings)
         self.fusion = RRFFusion(k=settings.retrieval.rrf_k)
+        self.reranker = SimpleReranker(
+            provider=settings.rerank.provider,
+            top_k=settings.rerank.top_k,
+        )
         self.formatter = ResponseFormatter()
         self.trace_collector = TraceCollector(settings.observability.trace_file)
 
@@ -121,12 +129,29 @@ class QueryWorkflow:
         if no_rerank or not self.settings.rerank.enabled:
             final_results = fusion_results
             rerank_mode = "disabled"
+            rerank_provider = "none"
         else:
-            final_results = fusion_results
-            rerank_mode = "fallback_to_fusion"
+            try:
+                final_results = self.reranker.rerank(
+                    processed_query=processed_query,
+                    results=fusion_results,
+                    top_k=min(top_k, self.settings.rerank.top_k),
+                )
+                rerank_mode = "applied"
+                rerank_provider = self.reranker.provider
+            except Exception as exc:
+                final_results = fusion_results
+                rerank_mode = "fallback_to_fusion"
+                rerank_provider = self.settings.rerank.provider
+                trace.metadata["rerank_error"] = str(exc)
         trace.record_stage(
             "rerank",
-            payload={"mode": rerank_mode, "result_count": len(final_results)},
+            payload={
+                "mode": rerank_mode,
+                "provider": rerank_provider,
+                "result_count": len(final_results),
+                "top_chunk_id": final_results[0].chunk_id if final_results else None,
+            },
             elapsed_ms=(perf_counter() - stage_t0) * 1000.0,
         )
 

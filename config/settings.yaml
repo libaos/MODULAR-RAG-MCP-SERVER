@@ -30,8 +30,8 @@ retrieval:
 
 rerank:
   enabled: false
-  provider: "none"
-  model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  provider: "simple"
+  model: "simple-local-reranker"
   top_k: 5
 
 evaluation:
