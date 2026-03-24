@@ -2,6 +2,7 @@
 
 from .bm25_indexer import BM25Indexer
 from .chunker import DocumentChunker
+from .chunk_refiner import ChunkRefiner
 from .chroma_upserter import ChromaUpserter
 from .embedding_encoder import EmbeddingEncoder
 from .file_integrity import SQLiteIntegrityChecker
@@ -11,6 +12,7 @@ from .pdf_loader import PdfLoader
 __all__ = [
     "PdfLoader",
     "DocumentChunker",
+    "ChunkRefiner",
     "EmbeddingEncoder",
     "BM25Indexer",
     "ChromaUpserter",

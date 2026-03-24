@@ -25,6 +25,7 @@
 - PDF 摄取
 - SHA256 去重
 - 文本分块
+- ChunkRefiner（规则版）
 - Ollama Embedding
 - BM25 稀疏索引
 - Chroma 向量入库
@@ -215,7 +216,7 @@ ollama list
 
 当前最近一次全量结果：
 
-- `34 passed`
+- `37 passed`
 
 ---
 
@@ -238,6 +239,7 @@ ollama list
 
 - 还没有做真正的 rerank
 - 当前只实现了本地 `simple rerank`，还没有 cross-encoder / LLM rerank
+- `ChunkRefiner` 当前只实现了规则版清洗，还没有 LLM 增强版
 - 还没有接生成式回答
 - 还没有做图片落盘和多模态返回
 - 还没有拆成自己独立的 `.venv`

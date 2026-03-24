@@ -4,13 +4,14 @@
 
 - `PdfLoader`
 - `DocumentChunker`
+- `ChunkRefiner`
 - `EmbeddingEncoder`
 - `BM25Indexer`
 - `ChromaUpserter`
 
 也就是说，当前最小闭环已经是：
 
-- `PDF -> Document -> Chunks -> Embeddings -> BM25 -> Chroma`
+- `PDF -> Document -> Chunks -> ChunkRefiner -> Embeddings -> BM25 -> Chroma`
 
 还没有接入的能力依然包括：
 
@@ -27,6 +28,7 @@ from typing import Any, Dict, List, Optional
 
 from modular_rag_repro.ingestion.bm25_indexer import BM25Indexer
 from modular_rag_repro.ingestion.chunker import DocumentChunker
+from modular_rag_repro.ingestion.chunk_refiner import ChunkRefiner
 from modular_rag_repro.ingestion.chroma_upserter import ChromaUpserter
 from modular_rag_repro.ingestion.embedding_encoder import EmbeddingEncoder
 from modular_rag_repro.ingestion.file_integrity import SQLiteIntegrityChecker
@@ -77,6 +79,7 @@ class IngestionPipeline:
         collection: str = "default",
         loader: Optional[PdfLoader] = None,
         chunker: Optional[DocumentChunker] = None,
+        chunk_refiner: Optional[ChunkRefiner] = None,
         embedding_encoder: Optional[EmbeddingEncoder] = None,
         bm25_indexer: Optional[BM25Indexer] = None,
         chroma_upserter: Optional[ChromaUpserter] = None,
@@ -86,6 +89,7 @@ class IngestionPipeline:
         self.collection = collection
         self.loader = loader or PdfLoader(extract_images=True)
         self.chunker = chunker or DocumentChunker(settings)
+        self.chunk_refiner = chunk_refiner or ChunkRefiner(settings)
         self.embedding_encoder = embedding_encoder or EmbeddingEncoder(settings)
         self.bm25_indexer = bm25_indexer or BM25Indexer(index_dir="data/db/bm25")
         self.chroma_upserter = chroma_upserter or ChromaUpserter(settings, collection=collection)
@@ -104,9 +108,10 @@ class IngestionPipeline:
         1. 做 SHA256 幂等检查
         2. 读取 PDF
         3. 切分 chunk
-        4. 生成 embedding
-        5. 构建 BM25 索引
-        6. 写入 Chroma
+        4. 规则清洗 chunk
+        5. 生成 embedding
+        6. 构建 BM25 索引
+        7. 写入 Chroma
         """
         stages: Dict[str, Any] = {}
         file_hash: str | None = None
@@ -156,6 +161,19 @@ class IngestionPipeline:
 
             if trace is not None:
                 trace.record_stage("chunk", stages["chunk"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
+
+            stage_t0 = perf_counter()
+            chunks = self.chunk_refiner.refine_chunks(chunks)
+            changed_chunk_count = sum(1 for chunk in chunks if chunk.metadata.get("refinement_changed") is True)
+            stages["refine"] = {
+                "chunk_count": len(chunks),
+                "changed_chunk_count": changed_chunk_count,
+                "refined_by": "rule",
+                "use_llm": self.chunk_refiner.use_llm,
+            }
+
+            if trace is not None:
+                trace.record_stage("refine", stages["refine"], elapsed_ms=(perf_counter() - stage_t0) * 1000.0)
 
             stage_t0 = perf_counter()
             vectors = self.embedding_encoder.encode_chunks(chunks)
