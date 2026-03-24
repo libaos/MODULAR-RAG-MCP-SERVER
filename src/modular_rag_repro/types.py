@@ -139,6 +139,8 @@ class QueryResponse:
     collection: str
     result_count: int
     summary: str
+    generated_answer: Optional[str] = None
+    answer_mode: str = "retrieval_only"
     items: List[QueryResponseItem] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -149,6 +151,8 @@ class QueryResponse:
             "collection": self.collection,
             "result_count": self.result_count,
             "summary": self.summary,
+            "generated_answer": self.generated_answer,
+            "answer_mode": self.answer_mode,
             "items": [asdict(item) for item in self.items],
             "metadata": self.metadata,
         }

@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from typing import List
 
+from modular_rag_repro.llm import OllamaClient
 from modular_rag_repro.settings import Settings
 from modular_rag_repro.types import Chunk
 
@@ -40,6 +41,16 @@ class ChunkRefiner:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.use_llm = settings.ingestion.chunk_refiner.use_llm
+        self.provider = settings.ingestion.chunk_refiner.provider.lower()
+        self.model = settings.ingestion.chunk_refiner.model or settings.llm.model
+        self.timeout = settings.ingestion.chunk_refiner.timeout_seconds
+        self.client = OllamaClient(
+            base_url=settings.llm.base_url,
+            model=self.model,
+            temperature=0.0,
+            max_tokens=min(settings.llm.max_tokens, 512),
+            timeout=self.timeout,
+        )
 
     def refine_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
         """批量清洗 chunk。
@@ -54,12 +65,27 @@ class ChunkRefiner:
 
     def refine_chunk(self, chunk: Chunk) -> Chunk:
         """清洗单个 chunk，并在 metadata 里标记清洗结果。"""
-        refined_text = self._rule_based_refine(chunk.text)
+        refined_by = "rule"
+        refiner_mode = "rule_only"
+        refiner_fallback = None
+        if self.use_llm and self.provider == "llm":
+            try:
+                refined_text = self._llm_refine(chunk.text)
+                refined_by = "llm"
+                refiner_mode = "llm"
+            except Exception:
+                refined_text = self._rule_based_refine(chunk.text)
+                refiner_mode = "fallback_rule"
+                refiner_fallback = "llm"
+        else:
+            refined_text = self._rule_based_refine(chunk.text)
         changed = refined_text != chunk.text
 
         metadata = dict(chunk.metadata)
-        metadata["refined_by"] = "rule"
-        metadata["refiner_mode"] = "rule_only"
+        metadata["refined_by"] = refined_by
+        metadata["refiner_mode"] = refiner_mode
+        if refiner_fallback:
+            metadata["refiner_fallback"] = refiner_fallback
         metadata["refinement_changed"] = changed
         metadata["original_char_length"] = len(chunk.text)
         metadata["refined_char_length"] = len(refined_text)
@@ -90,3 +116,14 @@ class ChunkRefiner:
 
         # 如果规则清洗意外把内容清空，就退回原文，避免把有效文本误删。
         return refined if refined else text.strip()
+
+    def _llm_refine(self, text: str) -> str:
+        """调用 LLM 进行最小文本精炼。"""
+        prompt = (
+            "请对下面文本做轻量清洗，只做格式整理，不改变事实内容。\n"
+            "要求：去掉明显噪声、合并多余空白、保留原语言。\n\n"
+            f"文本：\n{text}\n\n"
+            "输出清洗后的正文："
+        )
+        refined = self.client.generate(prompt).strip()
+        return refined or self._rule_based_refine(text)

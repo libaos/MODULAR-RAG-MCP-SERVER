@@ -1,4 +1,4 @@
-"""`SimpleReranker` 的最小单元测试。"""
+"""`Reranker` 的最小单元测试。"""
 
 from __future__ import annotations
 
@@ -55,9 +55,53 @@ def test_none_provider_keeps_original_order() -> None:
 def test_invalid_provider_raises_error() -> None:
     """未知 provider 应报错。"""
     processor = QueryProcessor()
-    reranker = SimpleReranker(provider="cross_encoder", top_k=5)
+    reranker = SimpleReranker(provider="mystery", top_k=5)
     processed = processor.process("sample pdf")
     results = [make_result("chunk_a", 0.9, "sample pdf")]
 
     with pytest.raises(ValueError, match="不支持的 rerank provider"):
         reranker.rerank(processed, results, top_k=5)
+
+
+def test_llm_provider_falls_back_to_simple(monkeypatch: pytest.MonkeyPatch) -> None:
+    """llm provider 失败时应退回 simple 逻辑。"""
+    processor = QueryProcessor()
+    reranker = SimpleReranker(provider="llm", top_k=5)
+    processed = processor.process("sample pdf")
+
+    results = [
+        make_result("chunk_a", 0.9, "generic content with weak relevance"),
+        make_result("chunk_b", 0.5, "sample pdf document with strong relevance"),
+    ]
+
+    monkeypatch.setattr(reranker, "_rerank_with_llm", lambda processed_query, results, top_k: (_ for _ in ()).throw(RuntimeError("llm down")))
+
+    reranked = reranker.rerank(processed, results, top_k=5)
+
+    assert [item.chunk_id for item in reranked] == ["chunk_b", "chunk_a"]
+    assert reranked[0].metadata["rerank_provider"] == "simple"
+    assert reranked[0].metadata["rerank_fallback"] == "llm"
+
+
+def test_cross_encoder_provider_falls_back_to_simple(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cross_encoder provider 失败时也应退回 simple。"""
+    processor = QueryProcessor()
+    reranker = SimpleReranker(provider="cross_encoder", top_k=5)
+    processed = processor.process("sample pdf")
+
+    results = [
+        make_result("chunk_a", 0.9, "generic content with weak relevance"),
+        make_result("chunk_b", 0.5, "sample pdf document with strong relevance"),
+    ]
+
+    monkeypatch.setattr(
+        reranker,
+        "_rerank_with_cross_encoder",
+        lambda processed_query, results, top_k: (_ for _ in ()).throw(RuntimeError("ce down")),
+    )
+
+    reranked = reranker.rerank(processed, results, top_k=5)
+
+    assert [item.chunk_id for item in reranked] == ["chunk_b", "chunk_a"]
+    assert reranked[0].metadata["rerank_provider"] == "simple"
+    assert reranked[0].metadata["rerank_fallback"] == "cross_encoder"

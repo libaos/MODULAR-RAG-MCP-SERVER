@@ -50,8 +50,12 @@ async def handler(query: str, top_k: int = 5, collection: Optional[str] = None) 
     response = workflow_result.formatted_response
     text = workflow.formatter.render_text(response)
     image_blocks = workflow.formatter.multimodal.build_mcp_blocks(workflow_result.final_results)
+    answer_blocks = []
+    if response.generated_answer:
+        answer_blocks.append(types.TextContent(type="text", text=response.generated_answer))
     return types.CallToolResult(
         content=[
+            *answer_blocks,
             types.TextContent(type="text", text=text),
             types.TextContent(type="text", text=json.dumps(response.to_dict(), ensure_ascii=False, indent=2)),
             *image_blocks,

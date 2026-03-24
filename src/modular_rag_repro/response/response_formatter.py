@@ -22,6 +22,9 @@ class ResponseFormatter:
         query: str,
         collection: str,
         results: List[RetrievalResult],
+        generated_answer: str | None = None,
+        answer_mode: str = "retrieval_only",
+        answer_metadata: dict | None = None,
     ) -> QueryResponse:
         """把检索结果格式化为稳定结构。"""
         items: List[QueryResponseItem] = []
@@ -47,12 +50,17 @@ class ResponseFormatter:
             "result_count": len(items),
             "top_chunk_id": items[0].chunk_id if items else None,
             "total_image_count": sum(item.image_count for item in items),
+            "answer_mode": answer_mode,
         }
+        if answer_metadata:
+            metadata["answer_generation"] = answer_metadata
         return QueryResponse(
             query=query,
             collection=collection,
             result_count=len(items),
             summary=summary,
+            generated_answer=generated_answer,
+            answer_mode=answer_mode,
             items=items,
             metadata=metadata,
         )
@@ -60,6 +68,12 @@ class ResponseFormatter:
     def render_text(self, response: QueryResponse) -> str:
         """把结构化响应渲染成终端可读文本。"""
         lines = []
+        if response.generated_answer:
+            lines.append("=" * 60)
+            lines.append("GENERATED ANSWER")
+            lines.append("=" * 60)
+            lines.append(response.generated_answer)
+            lines.append("")
         lines.append("=" * 60)
         lines.append("FORMATTED RESPONSE")
         lines.append("=" * 60)

@@ -25,17 +25,18 @@
 - PDF 摄取
 - SHA256 去重
 - 文本分块
-- ChunkRefiner（规则版）
-- MetadataEnricher（规则版）
+- ChunkRefiner（规则版 + 可选 LLM fallback）
+- MetadataEnricher（规则版 + 可选 LLM fallback）
 - 图片落盘与本地索引
-- ImageCaptioner（规则版）
+- ImageCaptioner（规则版 + 可选 Vision fallback）
 - Ollama Embedding
 - BM25 稀疏索引
 - Chroma 向量入库
 - Dense 检索
 - Sparse 检索
 - RRF 融合
-- 本地 Simple Rerank
+- provider 化 Rerank（`simple / llm / cross_encoder` + fallback）
+- 生成式最终回答（`local / ollama`）
 - CLI 查询
 - MCP Server
 - MCP 多模态图片返回
@@ -89,7 +90,9 @@ cd "D:\OneDrive - stu.scau.edu.cn\桌面\workspace\MODULAR-RAG-MCP-SERVER\repro"
 - Embedding: `ollama / nomic-embed-text`
 - Vector Store: `chroma`
 - BM25: 本地 JSON 索引
-- Rerank: `simple`（默认关闭，打开 `enabled` 即可生效）
+- Rerank: `simple`（默认关闭，可切到 `llm / cross_encoder`，失败会 fallback）
+- Answer Generation: `local`（默认关闭，打开 `enabled` 可直接生成最终回答）
+- Refiner / Enricher / Captioner: 默认走规则版，打开增强开关后走 provider，并保留 fallback
 
 建议先确认 Ollama 可用：
 
@@ -164,8 +167,10 @@ ollama list
 其中：
 
 - `Data Browser` 可以查看文档摘要并删除文档
+- `Data Browser` 可以查看图片预览和图片明细
 - `Ingestion Manager` 可以上传 PDF 并直接走摄取链路
 - `Ingestion Traces / Query Traces` 会读取 `logs/traces.jsonl`
+- `Query Traces` 能看到 `rerank / answer_generation` 阶段
 - `Evaluation Panel` 会读取 `data/evaluation/*.json`
 
 ---
@@ -220,7 +225,7 @@ ollama list
 
 当前最近一次全量结果：
 
-- `48 passed`
+- `62 passed`
 
 ---
 
@@ -241,16 +246,14 @@ ollama list
 
 这份复现版已经可用，但还保留了几个明确边界：
 
-- 还没有做真正的 rerank
-- 当前只实现了本地 `simple rerank`，还没有 cross-encoder / LLM rerank
-- `ChunkRefiner` 当前只实现了规则版清洗，还没有 LLM 增强版
-- `MetadataEnricher` 当前只实现了规则版增强，还没有 LLM 增强版
-- `ImageCaptioner` 当前只实现了规则版描述，还没有视觉 LLM 增强版
-- 还没有接生成式回答
-- Dashboard 还没有把图片做成更完整的可视化浏览
+- `cross_encoder / llm rerank` 已接入 provider 结构，但默认仍建议本地 `simple` 作为稳定基线
+- `ChunkRefiner / MetadataEnricher / ImageCaptioner` 已有增强路径，但默认还是规则版更稳
+- 视觉 caption 当前优先是本地优先的 provider/fallback 设计，不是完整云端生产能力
+- 最终回答当前支持 `local / ollama`，仍然是“检索增强回答”，不是长链路 Agent 生成
+- Dashboard 已能预览图片和展示回答相关状态，但还不是完整的富多模态工作台
 - 还没有拆成自己独立的 `.venv`
 
-也就是说，这份复现版更偏“最小可用的工程闭环”，不是完整生产版。
+也就是说，这份复现版现在已经是“本地优先全对齐版”，但仍保留本地优先路线下的质量和 provider 范围边界。
 
 ---
 
@@ -259,3 +262,7 @@ ollama list
 你现在可以把这份 `repro/` 理解成：
 
 > 一套已经完成了“摄取、检索、MCP、Dashboard、Trace、评估、文档管理、测试收口”的最小 Modular RAG 复现版。
+
+如果按当前状态更准确地说：
+
+> 一套已经完成“核心主线 + 本地优先增强链路 + 全量测试回归”的 Modular RAG 复现版。

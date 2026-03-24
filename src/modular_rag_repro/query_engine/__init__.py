@@ -1,5 +1,6 @@
 """查询链路相关模块。"""
 
+from .answer_generator import AnswerGenerator
 from .dense_retriever import DenseRetriever
 from .fusion import RRFFusion
 from .query_processor import QueryProcessor
@@ -13,6 +14,7 @@ __all__ = [
     "SparseRetriever",
     "RRFFusion",
     "SimpleReranker",
+    "AnswerGenerator",
     "QueryWorkflow",
     "QueryWorkflowResult",
 ]

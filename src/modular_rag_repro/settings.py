@@ -25,11 +25,13 @@ def resolve_path(path_value: str) -> Path:
 @dataclass(slots=True)
 class LLMSettings:
     """文本模型配置。"""
+    enabled: bool = True
     provider: str = "ollama"
     model: str = "qwen2.5:3b"
     base_url: str = "http://localhost:11434"
     temperature: float = 0.0
     max_tokens: int = 2048
+    timeout_seconds: float = 60.0
 
 
 @dataclass(slots=True)
@@ -47,7 +49,10 @@ class VisionLLMSettings:
     enabled: bool = False
     provider: str = "openai"
     model: str = "gpt-4o"
+    base_url: str = "http://localhost:11434"
     max_image_size: int = 2048
+    timeout_seconds: float = 60.0
+    fallback_to_rule: bool = True
 
 
 @dataclass(slots=True)
@@ -74,6 +79,18 @@ class RerankSettings:
     provider: str = "simple"
     model: str = "simple-local-reranker"
     top_k: int = 5
+    timeout_seconds: float = 30.0
+    fallback_provider: str = "simple"
+
+
+@dataclass(slots=True)
+class AnswerGenerationSettings:
+    """最终回答生成配置。"""
+    enabled: bool = False
+    provider: str = "local"
+    model: str = "local-template"
+    max_context_chunks: int = 3
+    timeout_seconds: float = 30.0
 
 
 @dataclass(slots=True)
@@ -97,6 +114,9 @@ class ObservabilitySettings:
 class RefinerSettings:
     """通用的开关型增强配置。"""
     use_llm: bool = False
+    provider: str = "rule"
+    model: str = ""
+    timeout_seconds: float = 30.0
 
 
 @dataclass(slots=True)
@@ -122,6 +142,7 @@ class Settings:
     vector_store: VectorStoreSettings = field(default_factory=VectorStoreSettings)
     retrieval: RetrievalSettings = field(default_factory=RetrievalSettings)
     rerank: RerankSettings = field(default_factory=RerankSettings)
+    answer_generation: AnswerGenerationSettings = field(default_factory=AnswerGenerationSettings)
     evaluation: EvaluationSettings = field(default_factory=EvaluationSettings)
     observability: ObservabilitySettings = field(default_factory=ObservabilitySettings)
     ingestion: IngestionSettings = field(default_factory=IngestionSettings)
@@ -160,6 +181,7 @@ def load_settings(config_path: str | None = None) -> Settings:
         vector_store=VectorStoreSettings(**raw.get("vector_store", {})),
         retrieval=RetrievalSettings(**raw.get("retrieval", {})),
         rerank=RerankSettings(**raw.get("rerank", {})),
+        answer_generation=AnswerGenerationSettings(**raw.get("answer_generation", {})),
         evaluation=EvaluationSettings(**raw.get("evaluation", {})),
         observability=ObservabilitySettings(**raw.get("observability", {})),
         ingestion=IngestionSettings(

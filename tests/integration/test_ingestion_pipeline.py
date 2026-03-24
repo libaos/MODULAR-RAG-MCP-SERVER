@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from modular_rag_repro.ingestion import BM25Indexer, ChromaUpserter, IngestionPipeline
 from modular_rag_repro.types import Document
 from helpers import SAMPLE_PDF, WITH_IMAGES_PDF, cleanup_collection
@@ -105,5 +107,35 @@ def test_ingestion_pipeline_stores_images_for_pdf_with_images(test_settings, uni
         assert result.document.metadata["images"][0]["file_path"]
         assert "Image description:" in result.chunks[0].text
         assert result.chunks[0].metadata["captioned_image_count"] >= 1
+    finally:
+        cleanup_collection(test_settings, unique_collection)
+
+
+def test_ingestion_pipeline_records_fallback_modes(
+    test_settings,
+    unique_collection: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """增强器失败时，pipeline 应保留 fallback metadata。"""
+    cleanup_collection(test_settings, unique_collection)
+    test_settings.ingestion.chunk_refiner.use_llm = True
+    test_settings.ingestion.chunk_refiner.provider = "llm"
+    test_settings.ingestion.metadata_enricher.use_llm = True
+    test_settings.ingestion.metadata_enricher.provider = "llm"
+    test_settings.vision_llm.enabled = True
+    test_settings.vision_llm.provider = "ollama"
+
+    pipeline = IngestionPipeline(test_settings, collection=unique_collection)
+    monkeypatch.setattr(pipeline.chunk_refiner, "_llm_refine", lambda text: (_ for _ in ()).throw(RuntimeError("llm down")))
+    monkeypatch.setattr(pipeline.metadata_enricher, "_llm_enrich", lambda chunk: (_ for _ in ()).throw(RuntimeError("llm down")))
+    monkeypatch.setattr(pipeline.image_captioner, "_build_vision_caption", lambda image_meta: (_ for _ in ()).throw(RuntimeError("vision down")))
+
+    try:
+        result = pipeline.run(str(WITH_IMAGES_PDF))
+
+        assert result.success is True
+        assert result.chunks[0].metadata["refiner_fallback"] == "llm"
+        assert result.chunks[0].metadata["enricher_fallback"] == "llm"
+        assert result.chunks[0].metadata["caption_fallback"] == "vision_llm"
     finally:
         cleanup_collection(test_settings, unique_collection)

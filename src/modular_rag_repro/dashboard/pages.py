@@ -53,6 +53,21 @@ def render_overview(service: DashboardService) -> None:
     st.json(
         {
             "llm": {"provider": settings.llm.provider, "model": settings.llm.model},
+            "answer_generation": {
+                "enabled": settings.answer_generation.enabled,
+                "provider": settings.answer_generation.provider,
+                "model": settings.answer_generation.model,
+            },
+            "vision_llm": {
+                "enabled": settings.vision_llm.enabled,
+                "provider": settings.vision_llm.provider,
+                "model": settings.vision_llm.model,
+            },
+            "rerank": {
+                "enabled": settings.rerank.enabled,
+                "provider": settings.rerank.provider,
+                "fallback_provider": settings.rerank.fallback_provider,
+            },
             "embedding": {"provider": settings.embedding.provider, "model": settings.embedding.model},
             "vector_store": {
                 "provider": settings.vector_store.provider,
@@ -107,6 +122,18 @@ def render_data_browser(service: DashboardService) -> None:
                 if preview_paths:
                     st.image(preview_paths, width=220)
                 st.caption(f"共 {len(images)} 张图片")
+                st.dataframe(
+                    [
+                        {
+                            "image_id": item.get("image_id"),
+                            "page": item.get("page"),
+                            "index": item.get("image_index"),
+                            "path": item.get("file_path"),
+                        }
+                        for item in images
+                    ],
+                    width="stretch",
+                )
 
     with st.expander("删除文档", expanded=False):
         doc_labels = [f"{item['title']} ({item['collection']})" for item in documents]
@@ -172,6 +199,10 @@ def render_trace_page(service: DashboardService, trace_type: str, title: str) ->
     st.dataframe(traces, width="stretch")
     st.subheader("Latest Trace")
     st.json(traces[-1])
+    latest_stages = traces[-1].get("stages", [])
+    if latest_stages:
+        st.subheader("Latest Trace Stages")
+        st.dataframe(latest_stages, width="stretch")
 
 
 def render_evaluation_panel(service: DashboardService) -> None:

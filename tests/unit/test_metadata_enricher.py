@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from modular_rag_repro.ingestion import MetadataEnricher
 from modular_rag_repro.types import Chunk
 
@@ -46,3 +48,41 @@ def test_metadata_enricher_preserves_existing_title_and_sets_image_flags(test_se
     assert enriched.metadata["title"] == "Existing Title"
     assert enriched.metadata["has_images"] is True
     assert enriched.metadata["image_count"] == 2
+
+
+def test_metadata_enricher_llm_mode_uses_llm_payload(test_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    """打开 llm 增强时，应优先使用 llm 返回值。"""
+    test_settings.ingestion.metadata_enricher.use_llm = True
+    test_settings.ingestion.metadata_enricher.provider = "llm"
+    enricher = MetadataEnricher(test_settings)
+    chunk = make_chunk("sample document body")
+
+    monkeypatch.setattr(
+        enricher,
+        "_llm_enrich",
+        lambda chunk: {"title": "LLM Title", "summary": "LLM Summary", "tags": ["llm", "title"]},
+    )
+
+    enriched = enricher.enrich_chunk(chunk)
+
+    assert enriched.metadata["title"] == "LLM Title"
+    assert enriched.metadata["summary"] == "LLM Summary"
+    assert enriched.metadata["enriched_by"] == "llm"
+    assert enriched.metadata["metadata_enricher_mode"] == "llm"
+    assert enriched.metadata.get("enricher_fallback") is None
+
+
+def test_metadata_enricher_llm_failure_falls_back_to_rule(test_settings, monkeypatch: pytest.MonkeyPatch) -> None:
+    """llm 增强失败时，应退回规则版。"""
+    test_settings.ingestion.metadata_enricher.use_llm = True
+    test_settings.ingestion.metadata_enricher.provider = "llm"
+    enricher = MetadataEnricher(test_settings)
+    chunk = make_chunk("Sample PDF document about vector retrieval and hybrid search.")
+
+    monkeypatch.setattr(enricher, "_llm_enrich", lambda chunk: (_ for _ in ()).throw(RuntimeError("llm down")))
+
+    enriched = enricher.enrich_chunk(chunk)
+
+    assert enriched.metadata["enriched_by"] == "rule"
+    assert enriched.metadata["metadata_enricher_mode"] == "fallback_rule"
+    assert enriched.metadata["enricher_fallback"] == "llm"

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from time import perf_counter
+from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from modular_rag_repro.ingestion.bm25_indexer import BM25Indexer
@@ -202,10 +203,13 @@ class IngestionPipeline:
             stage_t0 = perf_counter()
             chunks = self.chunk_refiner.refine_chunks(chunks)
             changed_chunk_count = sum(1 for chunk in chunks if chunk.metadata.get("refinement_changed") is True)
+            refine_modes = Counter(str(chunk.metadata.get("refiner_mode", "unknown")) for chunk in chunks)
             stages["refine"] = {
                 "chunk_count": len(chunks),
                 "changed_chunk_count": changed_chunk_count,
-                "refined_by": "rule",
+                "refined_by": chunks[0].metadata.get("refined_by") if chunks else "rule",
+                "mode_breakdown": dict(refine_modes),
+                "fallback_count": sum(1 for chunk in chunks if chunk.metadata.get("refiner_fallback")),
                 "use_llm": self.chunk_refiner.use_llm,
             }
 
@@ -214,11 +218,14 @@ class IngestionPipeline:
 
             stage_t0 = perf_counter()
             chunks = self.image_captioner.caption_chunks(chunks)
+            caption_modes = Counter(str(chunk.metadata.get("image_captioner_mode", "rule_only")) for chunk in chunks)
             stages["caption"] = {
                 "chunk_count": len(chunks),
                 "captioned_chunk_count": sum(1 for chunk in chunks if chunk.metadata.get("captioned_image_count")),
                 "captioned_images": sum(int(chunk.metadata.get("captioned_image_count", 0)) for chunk in chunks),
                 "vision_enabled": self.image_captioner.vision_enabled,
+                "mode_breakdown": dict(caption_modes),
+                "fallback_count": sum(1 for chunk in chunks if chunk.metadata.get("caption_fallback")),
             }
 
             if trace is not None:
@@ -226,11 +233,14 @@ class IngestionPipeline:
 
             stage_t0 = perf_counter()
             chunks = self.metadata_enricher.enrich_chunks(chunks)
+            enrich_modes = Counter(str(chunk.metadata.get("metadata_enricher_mode", "rule_only")) for chunk in chunks)
             stages["enrich"] = {
                 "chunk_count": len(chunks),
-                "enriched_by": "rule",
+                "enriched_by": chunks[0].metadata.get("enriched_by") if chunks else "rule",
                 "sample_title": chunks[0].metadata.get("title") if chunks else None,
                 "sample_tags": chunks[0].metadata.get("tags") if chunks else [],
+                "mode_breakdown": dict(enrich_modes),
+                "fallback_count": sum(1 for chunk in chunks if chunk.metadata.get("enricher_fallback")),
                 "use_llm": self.metadata_enricher.use_llm,
             }
 

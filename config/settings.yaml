@@ -1,9 +1,11 @@
 llm:
+  enabled: true
   provider: "ollama"
   model: "qwen2.5:3b"
   base_url: "http://localhost:11434"
   temperature: 0.0
   max_tokens: 2048
+  timeout_seconds: 60
 
 embedding:
   provider: "ollama"
@@ -15,7 +17,10 @@ vision_llm:
   enabled: false
   provider: "openai"
   model: "gpt-4o"
+  base_url: "http://localhost:11434"
   max_image_size: 2048
+  timeout_seconds: 60
+  fallback_to_rule: true
 
 vector_store:
   provider: "chroma"
@@ -33,6 +38,15 @@ rerank:
   provider: "simple"
   model: "simple-local-reranker"
   top_k: 5
+  timeout_seconds: 30
+  fallback_provider: "simple"
+
+answer_generation:
+  enabled: false
+  provider: "local"
+  model: "local-template"
+  max_context_chunks: 3
+  timeout_seconds: 30
 
 evaluation:
   enabled: false
@@ -74,5 +88,11 @@ ingestion:
   images_root_dir: "./data/images"
   chunk_refiner:
     use_llm: false
+    provider: "rule"
+    model: ""
+    timeout_seconds: 30
   metadata_enricher:
     use_llm: false
+    provider: "rule"
+    model: ""
+    timeout_seconds: 30

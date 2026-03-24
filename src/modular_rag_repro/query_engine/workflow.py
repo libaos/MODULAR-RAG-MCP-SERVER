@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import List, Optional
 
+from modular_rag_repro.query_engine.answer_generator import AnswerGenerator
 from modular_rag_repro.query_engine.dense_retriever import DenseRetriever
 from modular_rag_repro.query_engine.fusion import RRFFusion
 from modular_rag_repro.query_engine.query_processor import QueryProcessor
@@ -46,7 +47,11 @@ class QueryWorkflow:
         self.reranker = SimpleReranker(
             provider=settings.rerank.provider,
             top_k=settings.rerank.top_k,
+            settings=settings,
+            fallback_provider=settings.rerank.fallback_provider,
+            timeout=settings.rerank.timeout_seconds,
         )
+        self.answer_generator = AnswerGenerator(settings)
         self.formatter = ResponseFormatter(settings)
         self.trace_collector = TraceCollector(settings.observability.trace_file)
 
@@ -137,8 +142,9 @@ class QueryWorkflow:
                     results=fusion_results,
                     top_k=min(top_k, self.settings.rerank.top_k),
                 )
-                rerank_mode = "applied"
-                rerank_provider = self.reranker.provider
+                rerank_provider = str(final_results[0].metadata.get("rerank_provider", self.reranker.provider)) if final_results else self.reranker.provider
+                rerank_fallback = final_results[0].metadata.get("rerank_fallback") if final_results else None
+                rerank_mode = "fallback_to_simple" if rerank_fallback else "applied"
             except Exception as exc:
                 final_results = fusion_results
                 rerank_mode = "fallback_to_fusion"
@@ -156,16 +162,32 @@ class QueryWorkflow:
         )
 
         stage_t0 = perf_counter()
+        generated_answer, answer_mode, answer_metadata = self.answer_generator.generate(query, final_results)
+        trace.record_stage(
+            "answer_generation",
+            payload={
+                "mode": answer_mode,
+                "provider": str(answer_metadata.get("provider", "none")),
+                "has_answer": bool(generated_answer),
+            },
+            elapsed_ms=(perf_counter() - stage_t0) * 1000.0,
+        )
+
+        stage_t0 = perf_counter()
         formatted_response = self.formatter.format(
             query=query,
             collection=collection,
             results=final_results,
+            generated_answer=generated_answer,
+            answer_mode=answer_mode,
+            answer_metadata=answer_metadata,
         )
         trace.record_stage(
             "format_response",
             payload={
                 "summary": formatted_response.summary,
                 "result_count": formatted_response.result_count,
+                "answer_mode": formatted_response.answer_mode,
             },
             elapsed_ms=(perf_counter() - stage_t0) * 1000.0,
         )
